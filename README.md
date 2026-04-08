@@ -4,7 +4,7 @@
 
 Built with dual-model orchestration, parallel execution, and an unbreakable execution loop, Murphy delivers surgical precision at predator speed.
 
-![Version](https://img.shields.io/badge/version-3.0.0-ff0066)
+![Version](https://img.shields.io/badge/version-3.0.1-ff0066)
 ![License](https://img.shields.io/badge/license-MIT-00ff99)
 ![Platform](https://img.shields.io/badge/platform-Node.js%2018+-00ccff)
 
