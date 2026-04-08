@@ -110,3 +110,5 @@ if (config.debugMode) {
 // Predator Evolution Step 22
 
 // Predator Evolution Step 28
+
+// Predator Evolution Step 32
