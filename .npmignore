@@ -1,0 +1,30 @@
+# Source files
+src/
+tsconfig.json
+.env
+.env.local
+.env.example
+
+# Development configs
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+
+# Brain artifacts (internal)
+brain/
+implementation_plan.md
+task.md
+walkthrough.md
