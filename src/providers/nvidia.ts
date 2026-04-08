@@ -339,3 +339,5 @@ export class NVIDIAProvider {
         return { kimi, qwen };
     }
 }
+
+// Predator Evolution Step 13
