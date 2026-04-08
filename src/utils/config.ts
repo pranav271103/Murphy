@@ -120,3 +120,5 @@ if (config.debugMode) {
 // Predator Evolution Step 42
 
 // Predator Evolution Step 48
+
+// Predator Evolution Step 52
