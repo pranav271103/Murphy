@@ -441,3 +441,5 @@ export class AgentLoop {
 // Predator Evolution Step 15
 
 // Predator Evolution Step 17
+
+// Predator Evolution Step 21
