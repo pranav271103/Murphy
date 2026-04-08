@@ -353,3 +353,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
 // Predator Evolution Step 20
 
 // Predator Evolution Step 25
+
+// Predator Evolution Step 26
