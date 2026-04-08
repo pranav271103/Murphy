@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+npm-debug.log*
+package-lock.json
+
+# Env
+.env
+.env.local
+.env.example
+
+# Tools/Clutter
+.claude/
+commit_marathon.py
+.DS_Store
+
+# Brain/Artifacts
+brain/
+*.md
+!README.md
