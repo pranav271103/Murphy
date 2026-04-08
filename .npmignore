@@ -10,6 +10,7 @@ tsconfig.json
 .gitignore
 .vscode/
 .idea/
+.claude/
 
 # Node modules
 node_modules/
