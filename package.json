@@ -1,11 +1,20 @@
 {
   "name": "murphycode",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Murphy - The High-Speed Coding Predator. An agentic coding platform powered by dual-model orchestration.",
   "type": "module",
   "bin": {
+    "murphycode": "./dist/index.js",
     "murphy": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pranav271103/Murphy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pranav271103/Murphy.git/issues"
+  },
+  "homepage": "https://github.com/pranav271103/Murphy.git#readme",
   "main": "dist/index.js",
   "scripts": {
     "start": "tsx src/index.tsx",
