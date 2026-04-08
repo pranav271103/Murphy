@@ -1,11 +1,14 @@
 {
-  "name": "murphycode",
-  "version": "3.0.1",
+  "name": "@pranav271103/murphycode",
+  "version": "3.0.2",
   "description": "Murphy - The High-Speed Coding Predator. An agentic coding platform powered by dual-model orchestration.",
   "type": "module",
   "bin": {
     "murphycode": "./dist/index.js",
     "murphy": "./dist/index.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",

@@ -77,12 +77,12 @@ Built with dual-model orchestration, parallel execution, and an unbreakable exec
 
 **Run instantly via npx:**
 ```bash
-npx murphycode
+npx @pranav271103/murphycode
 ```
 
 **Install globally:**
 ```bash
-npm install -g murphycode
+npm install -g @pranav271103/murphycode
 murphycode
 ```
 
