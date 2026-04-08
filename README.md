@@ -75,13 +75,23 @@ Built with dual-model orchestration, parallel execution, and an unbreakable exec
 
 ### Installation
 
+**Run instantly via npx:**
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/murphy.git
-cd murphy
+npx murphycode
+```
 
-# Install dependencies
+**Install globally:**
+```bash
+npm install -g murphycode
+murphycode
+```
+
+**Clone for development:**
+```bash
+git clone https://github.com/pranav271103/Murphy.git
+cd murphy
 npm install
+```
 
 # Configure your environment
 cp .env.example .env
