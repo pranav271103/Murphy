@@ -9,7 +9,6 @@ import React, {
 import { Box, Text, useInput, useApp, Static, useStdout } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
-import Spinner from 'ink-spinner';
 import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry } from '../agent/loop.js';
 import { SYSTEM_PROMPT } from '../agent/constants.js';
 import { performance } from 'perf_hooks';
@@ -23,6 +22,7 @@ interface Message {
     content: string;
     tools?: ToolExecutionEvent[];
     timestamp: number;
+    expanded?: boolean;
 }
 
 interface SessionStats {
@@ -37,46 +37,120 @@ interface SessionStats {
 // ============================================================================
 
 /**
- * TreeNode - Displays a single tool execution in the hierarchy
+ * CommandDetailTree - Collapsible tree showing full command details
+ * Similar to Claude Code's command detail view
  */
-const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean }>(
-    ({ event, isLast }) => {
-        const statusIcon = useMemo(() => {
-            switch (event.status) {
-                case 'success':
-                    return '✅';
-                case 'failure':
-                    return '❌';
-                case 'recovered':
-                    return '🔧';
-                case 'running':
-                    return '⏳';
-                default:
-                    return '⏸️';
-            }
-        }, [event.status]);
+interface CommandDetailTreeProps {
+    event: ToolExecutionEvent;
+    isExpanded: boolean;
+    onToggle: () => void;
+}
 
-        const statusColor = useMemo(() => {
-            switch (event.status) {
-                case 'success':
-                    return 'green';
-                case 'failure':
-                    return 'red';
-                case 'recovered':
-                    return 'yellow';
-                case 'running':
-                    return 'cyan';
-                default:
-                    return 'gray';
-            }
-        }, [event.status]);
+const CommandDetailTree = memo<CommandDetailTreeProps>(({ event, isExpanded }) => {
+    if (!isExpanded) return null;
 
-        const connector = isLast ? '└──' : '├──';
-        const argsPreview = JSON.stringify(event.args).slice(0, 35);
+    const formatArgs = (args: any) => {
+        try {
+            return JSON.stringify(args, null, 2);
+        } catch {
+            return String(args);
+        }
+    };
 
-        return (
+    const formatResult = (result?: string) => {
+        if (!result) return 'No output';
+        // Truncate very long results
+        if (result.length > 500) {
+            return result.slice(0, 500) + '\n... (truncated)';
+        }
+        return result;
+    };
+
+    return (
+        <Box flexDirection="column" marginLeft={6} marginTop={1}>
+            <Box borderStyle="single" borderColor="gray" paddingX={1}>
+                <Box flexDirection="column">
+                    <Text color="gray" dimColor>Command: {event.name}</Text>
+                    <Text color="gray" dimColor>Status: {event.status}</Text>
+                    <Text color="gray" dimColor>Duration: {event.duration}ms</Text>
+                    {event.retryCount && event.retryCount > 0 && (
+                        <Text color="yellow">Retries: {event.retryCount}</Text>
+                    )}
+                </Box>
+
+                <Box marginTop={1} flexDirection="column">
+                    <Text color="cyan" dimColor>Arguments:</Text>
+                    <Text color="white">{formatArgs(event.args)}</Text>
+                </Box>
+
+                {event.result && (
+                    <Box marginTop={1} flexDirection="column">
+                        <Text color="green" dimColor>Result:</Text>
+                        <Text color="white">{formatResult(event.result)}</Text>
+                    </Box>
+                )}
+
+                {event.error && (
+                    <Box marginTop={1} flexDirection="column">
+                        <Text color="red" dimColor>Error:</Text>
+                        <Text color="red">{event.error}</Text>
+                    </Box>
+                )}
+            </Box>
+        </Box>
+    );
+});
+CommandDetailTree.displayName = 'CommandDetailTree';
+
+/**
+ * TreeNode - Displays a single tool execution in the hierarchy
+ * Clickable to expand/collapse details
+ */
+const TreeNode = memo<{
+    event: ToolExecutionEvent;
+    isLast: boolean;
+    isExpanded: boolean;
+    onToggle: () => void;
+}>(({ event, isLast, isExpanded, onToggle }) => {
+    const statusIcon = useMemo(() => {
+        switch (event.status) {
+            case 'success':
+                return '✅';
+            case 'failure':
+                return '❌';
+            case 'recovered':
+                return '🔧';
+            case 'running':
+                return '⏳';
+            default:
+                return '⏸️';
+        }
+    }, [event.status]);
+
+    const statusColor = useMemo(() => {
+        switch (event.status) {
+            case 'success':
+                return 'green';
+            case 'failure':
+                return 'red';
+            case 'recovered':
+                return 'yellow';
+            case 'running':
+                return 'cyan';
+            default:
+                return 'gray';
+        }
+    }, [event.status]);
+
+    const connector = isLast ? '└──' : '├──';
+    const expandIcon = isExpanded ? '▼' : '▶';
+    const argsPreview = JSON.stringify(event.args).slice(0, 40);
+
+    return (
+        <Box flexDirection="column">
             <Box marginLeft={2}>
                 <Text dimColor>{connector} </Text>
+                <Text color="gray">{expandIcon} </Text>
                 <Text color={statusColor as any}>{statusIcon}</Text>
                 <Text bold> {event.name}</Text>
                 <Text dimColor> ({event.duration}ms)</Text>
@@ -88,25 +162,52 @@ const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean }>(
                     <Text color="yellow"> [retry:{event.retryCount}]</Text>
                 ) : null}
             </Box>
-        );
-    }
-);
+            <CommandDetailTree event={event} isExpanded={isExpanded} onToggle={onToggle} />
+        </Box>
+    );
+});
 
 TreeNode.displayName = 'TreeNode';
 
 /**
- * ToolExecutionTree - Living hierarchy of command execution
+ * ToolExecutionTree - Living hierarchy of command execution with collapsible details
  */
 const ToolExecutionTree = memo<{ events: ToolExecutionEvent[] }>(({ events }) => {
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+    const toggleExpand = useCallback((id: string) => {
+        setExpandedIds((prev) => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    }, []);
+
     if (events.length === 0) return null;
+
+    const completedCount = events.filter(e => e.status === 'success' || e.status === 'failure').length;
+    const allComplete = completedCount === events.length;
 
     return (
         <Box flexDirection="column" marginLeft={4} marginTop={1}>
-            <Text dimColor italic>
-                └─ Execution Trace
-            </Text>
+            <Box>
+                <Text dimColor italic>
+                    {allComplete ? '└─' : '├─'} Execution Trace
+                </Text>
+                <Text dimColor> ({completedCount}/{events.length} complete)</Text>
+            </Box>
             {events.map((event, idx) => (
-                <TreeNode key={event.id} event={event} isLast={idx === events.length - 1} />
+                <TreeNode
+                    key={event.id}
+                    event={event}
+                    isLast={idx === events.length - 1}
+                    isExpanded={expandedIds.has(event.id)}
+                    onToggle={() => toggleExpand(event.id)}
+                />
             ))}
         </Box>
     );
@@ -115,16 +216,21 @@ const ToolExecutionTree = memo<{ events: ToolExecutionEvent[] }>(({ events }) =>
 ToolExecutionTree.displayName = 'ToolExecutionTree';
 
 /**
- * ActiveToolPanel - Real-time parallel pipeline display
+ * ActiveToolPanel - Real-time parallel pipeline display with enhanced status
  */
 const ActiveToolPanel = memo<{
     tools: ToolExecutionEvent[];
     spinnerFrame: string;
-}>(({ tools, spinnerFrame }) => {
-    if (tools.length === 0) return null;
+    phase?: string;
+}>(({ tools, spinnerFrame, phase }) => {
+    if (tools.length === 0 && !phase) return null;
 
     const runningCount = tools.filter((t) => t.status === 'running').length;
     const completedCount = tools.filter((t) => t.status === 'success').length;
+    const failedCount = tools.filter((t) => t.status === 'failure').length;
+    // pendingCount can be displayed if needed in future
+
+    const borderColor = runningCount > 0 ? 'yellow' : failedCount > 0 ? 'red' : 'green';
 
     return (
         <Box
@@ -132,33 +238,87 @@ const ActiveToolPanel = memo<{
             marginLeft={4}
             marginTop={1}
             paddingX={1}
+            paddingY={1}
             borderStyle="bold"
-            borderColor={runningCount > 0 ? 'yellow' : 'green'}
+            borderColor={borderColor as any}
         >
-            <Box>
+            {/* Header with status */}
+            <Box marginBottom={1}>
                 <Text bold color="cyan">
-                    ╔ PARALLEL PIPELINE
+                    ⚡ ACTIVE EXECUTION
                 </Text>
-                <Text dimColor>
-                    {' '}
-                    [Active:{runningCount} Done:{completedCount}/{tools.length}]
+                {tools.length > 0 && (
+                    <Text dimColor>
+                        {' '}
+                        [{runningCount}⏵ {completedCount}✓ {failedCount}✗ /{tools.length}]
+                    </Text>
+                )}
+                {phase && (
+                    <Text color="yellow"> | {phase}</Text>
+                )}
+            </Box>
+
+            {/* Progress bar */}
+            {tools.length > 0 && (
+                <Box marginBottom={1}>
+                    <Text>
+                        <Text color="green">{'█'.repeat(completedCount)}</Text>
+                        <Text color="yellow">{runningCount > 0 ? '▓'.repeat(runningCount) : ''}</Text>
+                        <Text color="red">{failedCount > 0 ? '▒'.repeat(failedCount) : ''}</Text>
+                        <Text color="gray" dimColor>{'░'.repeat(Math.max(0, tools.length - completedCount - runningCount - failedCount))}</Text>
+                    </Text>
+                    <Text dimColor> {Math.round((completedCount / tools.length) * 100)}%</Text>
+                </Box>
+            )}
+
+            {/* Tool list with status */}
+            <Box flexDirection="column">
+                {tools.map((tool) => {
+                    const statusIcon = tool.status === 'running'
+                        ? spinnerFrame
+                        : tool.status === 'success'
+                            ? '✓'
+                            : tool.status === 'failure'
+                                ? '✗'
+                                : tool.status === 'pending'
+                                    ? '○'
+                                    : '●';
+                    const statusColor = tool.status === 'running'
+                        ? 'yellow'
+                        : tool.status === 'success'
+                            ? 'green'
+                            : tool.status === 'failure'
+                                ? 'red'
+                                : 'gray';
+                    const statusText = tool.status === 'running'
+                        ? 'executing...'
+                        : tool.status === 'success'
+                            ? 'completed'
+                            : tool.status === 'failure'
+                                ? 'failed'
+                                : 'queued';
+
+                    return (
+                        <Box key={tool.id} marginLeft={2}>
+                            <Text color={statusColor as any}>{statusIcon}</Text>
+                            <Text bold> {tool.name}</Text>
+                            <Text dimColor> ({Math.round(performance.now() - tool.startTime)}ms)</Text>
+                            <Text color={statusColor as any}> ⏵ {statusText}</Text>
+                        </Box>
+                    );
+                })}
+            </Box>
+
+            {/* Status footer */}
+            <Box marginTop={1}>
+                <Text color="gray" dimColor>
+                    {runningCount > 0
+                        ? `⏳ ${runningCount} tool${runningCount > 1 ? 's' : ''} currently running...`
+                        : completedCount === tools.length && tools.length > 0
+                            ? '✓ All tools completed'
+                            : '⏸️ Waiting for execution...'}
                 </Text>
             </Box>
-            {tools.map((tool) => (
-                <Box key={tool.id} marginLeft={2}>
-                    <Text color={tool.status === 'running' ? 'yellow' : 'green'}>
-                        {tool.status === 'running' ? spinnerFrame : '✔'}
-                    </Text>
-                    <Text bold> {tool.name}</Text>
-                    <Text dimColor> ({Math.round(performance.now() - tool.startTime)}ms)</Text>
-                    {tool.status === 'running' && (
-                        <Text color="yellow">
-                            {' '}
-                            <Spinner type="dots" />
-                        </Text>
-                    )}
-                </Box>
-            ))}
         </Box>
     );
 });
@@ -172,70 +332,80 @@ const TelemetryBar = memo<{
     telemetry: LoopTelemetry | null;
     elapsed: number;
     spinnerFrame: string;
-}>(({ telemetry, elapsed, spinnerFrame }) => {
-    const statusColor = useMemo(() => {
-        if (!telemetry) return 'green';
-        if (telemetry.failedTools > 0) return 'yellow';
-        return 'cyan';
+    isProcessing: boolean;
+}>(({ telemetry, elapsed, spinnerFrame, isProcessing }) => {
+    // Compute once per render to prevent constant recalculation
+    const statusConfig = useMemo(() => {
+        if (!telemetry) {
+            return { color: 'green', text: '● ONLINE', label: 'STANDBY' };
+        }
+        if (telemetry.failedTools > 0) {
+            return { color: 'yellow', text: '⚠ ACTIVE', label: 'RUNNING' };
+        }
+        return { color: 'cyan', text: `${spinnerFrame} ACTIVE`, label: 'RUNNING' };
+    }, [telemetry, spinnerFrame]);
+
+    // Phase display
+    const phaseDisplay = useMemo(() => {
+        if (!telemetry) return 'STANDBY';
+        if (telemetry.phase === 'reasoning') return '🧠 THINKING';
+        if (telemetry.phase === 'execution') return '🔧 EXECUTING';
+        if (telemetry.phase === 'recovery') return '🚨 RECOVERING';
+        return '● ACTIVE';
     }, [telemetry]);
 
     return (
         <Box
             height={3}
             borderStyle="double"
-            borderColor={statusColor as any}
+            borderColor={statusConfig.color as any}
             paddingX={2}
             flexDirection="row"
             alignItems="center"
         >
             {/* System Status */}
             <Box width="15%">
-                <Text color={statusColor as any} bold>
-                    {telemetry?.phase === 'reasoning'
-                        ? `${spinnerFrame} THINK`
-                        : telemetry?.phase === 'execution'
-                            ? `${spinnerFrame} EXEC`
-                            : telemetry?.phase === 'recovery'
-                                ? '🔧 RECOVERY'
-                                : '● ONLINE'}
+                <Text color={statusConfig.color as any} bold>
+                    {phaseDisplay}
                 </Text>
             </Box>
 
-            {/* Telemetry Data */}
+            {/* Telemetry Data - optimized display */}
             <Box width="70%" justifyContent="center">
                 {telemetry ? (
-                    <Text>
-                        <Text color="cyan">ITER:</Text>
-                        <Text bold> {telemetry.iteration}</Text>
-                        <Text dimColor> | </Text>
-                        <Text color="magenta">LATENCY:</Text>
-                        <Text bold> {telemetry.modelLatency}ms</Text>
-                        <Text dimColor> | </Text>
-                        <Text color="yellow">ELAPSED:</Text>
-                        <Text bold> {elapsed}ms</Text>
-                        <Text dimColor> | </Text>
-                        <Text color="green">TOOLS:</Text>
-                        <Text bold>
-                            {' '}
-                            {telemetry.completedTools}/{telemetry.completedTools + telemetry.activeTools}
-                        </Text>
+                    <Text wrap="truncate">
+                        <Text color="cyan">IT:</Text>
+                        <Text bold>{telemetry.iteration}</Text>
+                        <Text dimColor>|</Text>
+                        <Text color="magenta">LAT:</Text>
+                        <Text bold>{telemetry.modelLatency}ms</Text>
+                        <Text dimColor>|</Text>
+                        <Text color="yellow">EL:</Text>
+                        <Text bold>{elapsed}ms</Text>
+                        <Text dimColor>|</Text>
+                        <Text color="green">OK:</Text>
+                        <Text bold>{telemetry.completedTools}</Text>
+                        {telemetry.activeTools > 0 && (
+                            <>
+                                <Text color="yellow">/~{telemetry.activeTools}</Text>
+                            </>
+                        )}
                         {telemetry.failedTools > 0 && (
                             <>
-                                <Text dimColor> | </Text>
-                                <Text color="red">FAILURES: {telemetry.failedTools}</Text>
+                                <Text color="red"> ✗{telemetry.failedTools}</Text>
                             </>
                         )}
                     </Text>
                 ) : (
                     <Text color="gray" dimColor>
-                        MURPHY v3.0 PREDATOR // STANDBY
+                        MURPHY v3.0 PREDATOR // READY
                     </Text>
                 )}
             </Box>
 
             {/* Version */}
             <Box width="15%" justifyContent="flex-end">
-                <Text dimColor>v3.0.PREDATOR</Text>
+                <Text dimColor>{isProcessing ? '⏵ RUNNING' : '● READY'}</Text>
             </Box>
         </Box>
     );
@@ -244,25 +414,63 @@ const TelemetryBar = memo<{
 TelemetryBar.displayName = 'TelemetryBar';
 
 /**
- * MessageHistory - Static display of completed messages
+ * MessageItem - Single message with stable rendering
  */
-const MessageHistory = memo<{ messages: Message[] }>(({ messages }) => {
+const MessageItem = memo<{ msg: Message }>(({ msg }) => {
+    const roleColor = msg.role === 'user' ? 'green' : 'cyan';
+    const roleLabel = msg.role === 'user' ? '❯ YOU' : '⚡ MURPHY';
+
     return (
-        <Static items={messages}>
-            {(msg) => (
-                <Box key={msg.timestamp} marginBottom={1} flexDirection="column">
-                    <Box>
-                        <Text bold color={msg.role === 'user' ? 'green' : 'cyan'}>
-                            {msg.role === 'user' ? '❯ YOU' : '⚡ MURPHY'}:
-                        </Text>
-                        <Text> {msg.content}</Text>
-                    </Box>
-                    {msg.tools && <ToolExecutionTree events={msg.tools} />}
-                </Box>
-            )}
-        </Static>
+        <Box marginBottom={1} flexDirection="column">
+            <Box>
+                <Text bold color={roleColor}>{roleLabel}:</Text>
+                <Text> {msg.content}</Text>
+            </Box>
+            {msg.tools && msg.tools.length > 0 && <ToolExecutionTree events={msg.tools} />}
+        </Box>
     );
 });
+MessageItem.displayName = 'MessageItem';
+
+/**
+ * MessageHistory - Static display of completed messages
+ * Using stable key to prevent re-renders
+ */
+/**
+ * MessageHistory - Static display of completed messages
+ * v3.1 Upgrade: Viewport management to only show recent history
+ */
+const MessageHistory = memo<{ messages: Message[]; maxVisible?: number }>(
+    ({ messages, maxVisible = 10 }) => {
+        // Viewport Logic: Only show the last N messages to prevent terminal overflow
+        const visibleMessages = useMemo(() => {
+            if (messages.length <= maxVisible) return messages;
+            return messages.slice(-maxVisible);
+        }, [messages, maxVisible]);
+
+        const items = useMemo(() => {
+            return visibleMessages.map((msg, idx) => ({
+                ...msg,
+                id: `${msg.timestamp}_${idx}`,
+            }));
+        }, [visibleMessages]);
+
+        return (
+            <Box flexDirection="column">
+                {messages.length > maxVisible && (
+                    <Box marginBottom={1} justifyContent="center">
+                        <Text dimColor italic>
+                            ... {messages.length - maxVisible} messages hidden in scrollback ...
+                        </Text>
+                    </Box>
+                )}
+                <Static items={items}>
+                    {(msg) => <MessageItem key={msg.id} msg={msg} />}
+                </Static>
+            </Box>
+        );
+    }
+);
 
 MessageHistory.displayName = 'MessageHistory';
 
@@ -308,17 +516,19 @@ const App: React.FC = () => {
         agentRef.current = new AgentLoop(SYSTEM_PROMPT);
     }, []);
 
-    // Spinner animation - optimized to run only when needed
+    // Spinner animation - optimized with RAF for smoother rendering
     useEffect(() => {
         if (status === 'ready') {
             setElapsed(0);
+            setTick(0);
             return;
         }
 
+        // Use longer interval to reduce re-render frequency
         const interval = setInterval(() => {
             setTick((t) => (t + 1) % 10);
             setElapsed((e) => e + 100);
-        }, 100);
+        }, 150); // Slightly slower updates = less flicker
 
         return () => clearInterval(interval);
     }, [status]);
@@ -445,12 +655,56 @@ const App: React.FC = () => {
         await agentRef.current.process(userInput, handleAgentUpdate);
     }, [handleAgentUpdate]);
 
+    // Paste buffer for bracketed paste mode support
+    const [isPasteMode, setIsPasteMode] = useState(false);
+    const pasteBufferRef = useRef('');
+
     /**
-     * Handle keyboard input
+     * Process pasted content - handles multi-line text, code blocks, special chars
+     */
+    const processPaste = useCallback((content: string) => {
+        // Handle multi-line paste - newlines become spaces in single-line input
+        // but preserve for processing
+        const normalized = content.replace(/\r\n/g, '\n').replace(/\n/g, ' ');
+        setInput((prev) => prev + normalized);
+    }, []);
+
+    /**
+     * Handle keyboard input with full paste support
+     * Supports bracketed paste mode (OSC 200/201) and direct multi-character input
      */
     useInput(
         useCallback(
             (inputStr: string, key: any) => {
+                // Detect bracketed paste start (ESC[200~)
+                if (inputStr === '\x1b[200~') {
+                    setIsPasteMode(true);
+                    pasteBufferRef.current = '';
+                    return;
+                }
+
+                // Detect bracketed paste end (ESC[201~)
+                if (inputStr === '\x1b[201~') {
+                    setIsPasteMode(false);
+                    processPaste(pasteBufferRef.current);
+                    pasteBufferRef.current = '';
+                    return;
+                }
+
+                // If in paste mode, accumulate characters
+                if (isPasteMode) {
+                    pasteBufferRef.current += inputStr;
+                    return;
+                }
+
+                // Handle multi-character input (non-bracketed paste)
+                if (inputStr.length > 1 && !key.ctrl && !key.meta) {
+                    // This is likely a paste event - process entire string
+                    processPaste(inputStr);
+                    return;
+                }
+
+                // Handle Enter key - submit message
                 if (key.return) {
                     if (
                         inputRef.current.trim().toLowerCase() === 'exit' ||
@@ -462,17 +716,77 @@ const App: React.FC = () => {
                     if (inputRef.current.trim()) {
                         handleSend();
                     }
-                } else if (key.backspace || key.delete) {
-                    setInput((prev) => prev.slice(0, -1));
-                } else if (key.ctrl && inputStr === 'c') {
+                    return;
+                }
+
+                // Handle backspace/delete
+                if (key.backspace || key.delete) {
+                    setInput((prev) => {
+                        // Handle UTF-8 characters properly
+                        if (prev.length === 0) return prev;
+                        // Check for surrogate pairs (emoji, etc.)
+                        const lastCode = prev.charCodeAt(prev.length - 1);
+                        if (lastCode >= 0xDC00 && lastCode <= 0xDFFF && prev.length > 1) {
+                            // High surrogate, remove both
+                            return prev.slice(0, -2);
+                        }
+                        return prev.slice(0, -1);
+                    });
+                    return;
+                }
+
+                // Handle Ctrl+C - exit
+                if (key.ctrl && inputStr === 'c') {
                     exit();
-                } else if (!key.ctrl && !key.meta && inputStr.length === 1) {
-                    setInput((prev) => prev + inputStr);
-                } else if (key.clear || key.escape) {
+                    return;
+                }
+
+                // Handle Ctrl+L - clear screen
+                if (key.ctrl && inputStr === 'l') {
+                    setMessages([]);
+                    return;
+                }
+
+                // Handle Ctrl+U - clear current input line
+                if (key.ctrl && inputStr === 'u') {
                     setInput('');
+                    return;
+                }
+
+                // Handle Ctrl+W - delete word
+                if (key.ctrl && inputStr === 'w') {
+                    setInput((prev) => {
+                        const trimmed = prev.trimEnd();
+                        const lastSpace = trimmed.lastIndexOf(' ');
+                        if (lastSpace === -1) return '';
+                        return trimmed.slice(0, lastSpace + 1);
+                    });
+                    return;
+                }
+
+                // Handle Ctrl+A - go to start of line
+                if (key.ctrl && inputStr === 'a') {
+                    // Visual feedback only - cursor moves conceptually
+                    return;
+                }
+
+                // Handle Ctrl+E - go to end of line
+                if (key.ctrl && inputStr === 'e') {
+                    return;
+                }
+
+                // Handle Escape - clear input
+                if (key.escape) {
+                    setInput('');
+                    return;
+                }
+
+                // Regular character input
+                if (!key.ctrl && !key.meta && inputStr.length >= 1) {
+                    setInput((prev) => prev + inputStr);
                 }
             },
-            [handleSend, exit]
+            [handleSend, exit, isPasteMode, processPaste]
         )
     );
 
@@ -509,9 +823,11 @@ const App: React.FC = () => {
                 borderColor="cyan"
                 paddingX={2}
                 paddingY={1}
+                // v3.1: Limit height to prevent terminal overflow and allow "scrolling" feel
+                minHeight={10}
             >
-                {/* Message History */}
-                <MessageHistory messages={messages} />
+                {/* Message History with Viewport */}
+                <MessageHistory messages={messages} maxVisible={showCompact ? 3 : 6} />
 
                 {/* Welcome Message */}
                 {messages.length === 0 && (
@@ -526,48 +842,69 @@ const App: React.FC = () => {
                     </Box>
                 )}
 
-                {/* Streaming Content */}
+                {/* Streaming Content - v3.1: Only show last 3 lines to minimize flicker */}
                 {streamingContent && (
                     <Box marginTop={1} flexDirection="column">
                         <Box>
                             <Text bold color="cyan">
-                                ⚡ MURPHY:
+                                ⚡ MURPHY (Reasoning):
                             </Text>
                         </Box>
                         <Box marginLeft={2}>
-                            <Text>{streamingContent}</Text>
+                            <Text>
+                                {streamingContent.length > 500
+                                    ? '...' + streamingContent.slice(-500)
+                                    : streamingContent}
+                            </Text>
                             <Text color="yellow"> {spinnerFrame}</Text>
                         </Box>
                     </Box>
                 )}
 
-                {/* Active Tools Panel */}
-                <ActiveToolPanel tools={activeTools} spinnerFrame={spinnerFrame} />
+                {/* Active Tools Panel with status */}
+                <ActiveToolPanel
+                    tools={activeTools}
+                    spinnerFrame={spinnerFrame}
+                    phase={currentPhase}
+                />
 
-                {/* Current Phase Indicator */}
-                {currentPhase && (
+                {/* Thinking indicator when no tools but processing */}
+                {currentPhase && activeTools.length === 0 && !streamingContent && (
                     <Box marginTop={1} marginLeft={2}>
                         <Text color="yellow">
-                            <Spinner type="line" /> {currentPhase}
+                            {spinnerFrame} {currentPhase}...
                         </Text>
                     </Box>
                 )}
             </Box>
 
             {/* TELEMETRY BAR */}
-            <TelemetryBar telemetry={telemetry} elapsed={elapsed} spinnerFrame={spinnerFrame} />
+            <TelemetryBar
+                telemetry={telemetry}
+                elapsed={elapsed}
+                spinnerFrame={spinnerFrame}
+                isProcessing={status !== 'ready'}
+            />
 
-            {/* INPUT AREA */}
-            <Box marginTop={1} paddingX={2}>
-                <Text color="cyan" bold>
-                    {status === 'ready' ? 'PREDATOR ❯ ' : '⏳ '}
-                </Text>
-                <Text>{input}</Text>
-                <Text color="gray" dimColor={input === ''}>
-                    {input === '' ? ' Deploy instructions...' : ''}
-                </Text>
-                <Box flexGrow={1} />
-                <Text dimColor>Ctrl+C Kill</Text>
+            {/* INPUT AREA - optimized to prevent flicker */}
+            <Box marginTop={1} paddingX={2} flexDirection="row">
+                <Box width={12}>
+                    <Text color="cyan" bold>
+                        {status === 'ready' ? 'PREDATOR ❯' : '⏳ RUNNING'}
+                    </Text>
+                </Box>
+                <Box flexGrow={1}>
+                    {input.length > 0 ? (
+                        <Text wrap="wrap">{input}</Text>
+                    ) : status === 'ready' ? (
+                        <Text color="gray" dimColor>Deploy instructions...</Text>
+                    ) : (
+                        <Text color="yellow">Processing...{spinnerFrame}</Text>
+                    )}
+                </Box>
+                <Box width={15} justifyContent="flex-end">
+                    <Text dimColor>{status === 'ready' ? 'Ctrl+C Exit' : '⏵ Working'}</Text>
+                </Box>
             </Box>
         </Box>
     );

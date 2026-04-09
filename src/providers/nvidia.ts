@@ -295,8 +295,12 @@ export class NVIDIAProvider {
                 }
 
                 // Check if retryable
-                const retryableErrors = ['timeout', 'rate_limit', 'connection', 'ECONNRESET', 'ETIMEDOUT'];
-                const isRetryable = retryableErrors.some(e =>
+                const isRateLimit = error.message?.toLowerCase().includes('rate') ||
+                    error.message?.includes('429') ||
+                    error.status === 429;
+
+                const retryableErrors = ['timeout', 'connection', 'ECONNRESET', 'ETIMEDOUT', '502', '503', '504'];
+                const isRetryable = isRateLimit || retryableErrors.some(e =>
                     error.message?.toLowerCase().includes(e) ||
                     error.code?.toLowerCase().includes(e)
                 );
@@ -305,8 +309,12 @@ export class NVIDIAProvider {
                     throw error;
                 }
 
-                console.warn(`[NVIDIA] Attempt ${attempt + 1} failed: ${error.message}. Retrying...`);
-                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+                // Exponential backoff with jitter, longer for rate limits
+                const baseDelay = isRateLimit ? 5000 : 1000;
+                const delay = (baseDelay * Math.pow(2, attempt)) + (Math.random() * 1000);
+
+                console.warn(`[NVIDIA] Attempt ${attempt + 1} failed (${isRateLimit ? 'Rate Limit' : 'Error'}). Retrying in ${Math.round(delay)}ms...`);
+                await new Promise(r => setTimeout(r, delay));
             }
         }
 

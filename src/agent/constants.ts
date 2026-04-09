@@ -128,9 +128,10 @@ You are the High-Speed Coding Predator.
 NOW EXECUTE THE MISSION.`;
 
 /**
- * Maximum number of iterations before forcing completion
+ * Maximum number of iterations - effectively unlimited for user tasks
+ * The agent will continue until task completion or explicit user abort
  */
-export const MAX_ITERATIONS = 25;
+export const MAX_ITERATIONS = 1000;
 
 /**
  * Maximum tool execution time (ms)

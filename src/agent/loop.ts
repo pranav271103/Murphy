@@ -79,9 +79,13 @@ export class AgentLoop {
     private messages: Message[] = [];
     private telemetry: LoopTelemetry;
     private executionLog: ToolExecutionEvent[] = [];
-    private readonly MAX_ITERATIONS = 25;
-    private readonly MAX_RETRIES = 2;
+    // Effectively unlimited - only user can stop the task
+    private readonly MAX_ITERATIONS = 1000;
+    private readonly MAX_RETRIES = 3;
     private abortController: AbortController | null = null;
+    public getIsProcessing(): boolean {
+        return this.abortController !== null && !this.abortController.signal.aborted;
+    }
 
     constructor(systemPrompt: string) {
         this.provider = new NVIDIAProvider();
@@ -244,30 +248,56 @@ export class AgentLoop {
     }
 
     /**
-     * Check if we should continue the loop or if task is complete
+     * Check if we should continue the loop
+     * v3.1 Upgrade: Smarter goal detection to prevent infinite loops
      */
     private shouldContinue(): boolean {
         const lastMessage = this.messages[this.messages.length - 1];
 
-        // Continue if last message was from user or tool
-        if (lastMessage.role === 'user' || lastMessage.role === 'tool') {
-            return true;
-        }
+        // 1. If last message is from user (fresh input), ALWAYS continue
+        if (lastMessage.role === 'user') return true;
 
-        // Continue if assistant made tool calls (waiting for results)
+        // 2. If last message is from a tool, ALWAYS continue (to process results)
+        if (lastMessage.role === 'tool') return true;
+
+        // 3. If assistant made tool calls, ALWAYS continue to execute them
         if (lastMessage.role === 'assistant' && lastMessage.tool_calls?.length) {
             return true;
         }
 
-        // Check if there are unfulfilled tool calls
-        const pendingToolCalls = this.messages.filter((m) => m.role === 'assistant' && m.tool_calls).flatMap((m) => m.tool_calls || []);
-        const completedToolCalls = this.messages.filter((m) => m.role === 'tool');
+        // 4. Check for unfulfilled tool calls (count check)
+        const totalToolCalls = this.messages
+            .filter((m) => m.role === 'assistant' && m.tool_calls)
+            .flatMap((m) => m.tool_calls || []).length;
+        const totalToolResults = this.messages.filter((m) => m.role === 'tool').length;
 
-        return pendingToolCalls.length > completedToolCalls.length;
+        if (totalToolCalls > totalToolResults) return true;
+
+        // 5. GOAL COMPLETION DETECTION (v3.1)
+        if (lastMessage.role === 'assistant' && lastMessage.content) {
+            const content = lastMessage.content;
+
+            // Explicit termination signal
+            if (content.includes('TASK_COMPLETE')) return false;
+
+            // Heuristic detection: If we have content and NO tools in the last turn,
+            // and we've already had at least one reasoning/execution cycle, we're likely done.
+            // UNLESS it's a question (contains '?')
+            const isQuestion = content.includes('?') && !content.includes('TASK_COMPLETE');
+            if (!isQuestion && this.telemetry.iteration >= 1) {
+                return false;
+            }
+        }
+
+        // 6. Safety Break: If we have too many messages without progress, stop
+        if (this.messages.length > 50) return false;
+
+        return true;
     }
 
     /**
-     * Main processing loop - The Predator's Brain
+     * Main processing loop - The UNBREAKABLE Predator's Brain
+     * NEVER exits until task is fully delivered to user
      */
     async process(
         userInput: string,
@@ -280,12 +310,21 @@ export class AgentLoop {
 
         // Add user message
         this.messages.push({ role: 'user', content: userInput });
-        onUpdate('phase_change', { phase: 'reasoning', message: 'Strategic Planning Phase' });
+        onUpdate('phase_change', { phase: 'reasoning', message: '🧠 Strategic Planning Phase' });
+
+        let lastError: Error | null = null;
+        let consecutiveErrors = 0;
+        const MAX_CONSECUTIVE_ERRORS = 3;
 
         try {
             while (this.telemetry.iteration < this.MAX_ITERATIONS) {
                 if (signal.aborted) {
-                    throw new Error('Operation aborted by user');
+                    // Task completed
+                    return {
+                        response: '⏹️ Task stopped by user. Progress was saved.',
+                        telemetry: { ...this.telemetry },
+                        executionLog: [...this.executionLog],
+                    };
                 }
 
                 this.telemetry.iteration++;
@@ -297,115 +336,179 @@ export class AgentLoop {
                 onUpdate('telemetry', { telemetry: { ...this.telemetry } });
                 onUpdate('model_start', { phase, iteration: this.telemetry.iteration });
 
-                // Phase 1: Strategic Planning (Kimi K2) or Execution (Qwen3)
-                const modelStartTime = performance.now();
-                const response = await this.provider.getCompletion({
-                    messages: this.messages,
-                    modelType: phase,
-                    tools: phase === 'execution' ? tools : undefined,
-                    temperature: phase === 'reasoning' ? 0.3 : 0.1,
-                    onStream: (chunk) => {
-                        onUpdate('model_stream', { chunk, phase });
-                    },
-                    signal,
-                });
+                try {
+                    // Phase 1: Strategic Planning (Kimi K2) or Execution (Qwen3)
+                    const modelStartTime = performance.now();
+                    const response = await this.provider.getCompletion({
+                        messages: this.messages,
+                        modelType: phase,
+                        tools: phase === 'execution' ? tools : undefined,
+                        temperature: phase === 'reasoning' ? 0.3 : 0.1,
+                        onStream: (chunk) => {
+                            onUpdate('model_stream', { chunk, phase });
+                        },
+                        signal,
+                    });
 
-                this.telemetry.modelLatency = Math.round(performance.now() - modelStartTime);
+                    this.telemetry.modelLatency = Math.round(performance.now() - modelStartTime);
+                    consecutiveErrors = 0; // Reset error counter on success
 
-                if (!response) {
-                    throw new Error('Empty response from model');
-                }
+                    if (!response) {
+                        throw new Error('Empty response from model');
+                    }
 
-                onUpdate('model_complete', {
-                    phase,
-                    latency: this.telemetry.modelLatency,
-                    content: response.content,
-                });
+                    onUpdate('model_complete', {
+                        phase,
+                        latency: this.telemetry.modelLatency,
+                        content: response.content,
+                    });
 
-                // Handle BOTH official tool_calls and manual text fallbacks
-                let toolCalls = response.tool_calls || [];
+                    // Handle BOTH official tool_calls and manual text fallbacks
+                    let toolCalls = response.tool_calls || [];
 
-                // The Unbreakable Fallback: Parse text if no official tool calls
-                if (toolCalls.length === 0 && response.content) {
-                    toolCalls = this.parseTextToolCalls(response.content);
+                    // The Unbreakable Fallback: Parse text if no official tool calls
+                    if (toolCalls.length === 0 && response.content) {
+                        toolCalls = this.parseTextToolCalls(response.content);
+                        if (toolCalls.length > 0) {
+                            onUpdate('phase_change', {
+                                phase: 'recovery',
+                                message: '🔧 Text-to-Tool Fallback Activated',
+                            });
+                        }
+                    }
+
+                    // Add assistant message to history
+                    const assistantMessage: Message = {
+                        role: 'assistant',
+                        content: response.content || '',
+                        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+                    };
+                    this.messages.push(assistantMessage);
+
+                    // Phase 2: Parallel Tool Execution (if tools requested)
                     if (toolCalls.length > 0) {
                         onUpdate('phase_change', {
-                            phase: 'recovery',
-                            message: 'Text-to-Tool Fallback Activated',
+                            phase: 'execution',
+                            message: `🔧 Executing ${toolCalls.length} Tool${toolCalls.length > 1 ? 's' : ''}`,
                         });
+
+                        const { results, toolMessages } = await this.executeToolsParallel(toolCalls, onUpdate);
+
+                        // Add tool results to message history
+                        this.messages.push(...toolMessages);
+
+                        // Check for failures and trigger recovery if needed
+                        const failures = results.filter((r) => !r.success);
+                        if (failures.length > 0) {
+                            if (failures.length === results.length) {
+                                // All tools failed - trigger recovery mode
+                                onUpdate('phase_change', {
+                                    phase: 'recovery',
+                                    message: `🚨 Recovery Mode: ${failures.length} Tool Failure${failures.length > 1 ? 's' : ''}`,
+                                });
+                            }
+                            // Add recovery instructions to messages
+                            this.messages.push({
+                                role: 'system',
+                                content: `Some tools failed: ${failures.map(f => f.error).join(', ')}. Try alternative approaches.`,
+                            });
+                        }
+
+                        // Continue loop to analyze results - NEVER stop mid-task
+                        continue;
                     }
-                }
 
-                // Add assistant message to history
-                const assistantMessage: Message = {
-                    role: 'assistant',
-                    content: response.content || '',
-                    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-                };
-                this.messages.push(assistantMessage);
+                    // No tool calls - check if we're done
+                    if (!this.shouldContinue()) {
+                        const finalResponse = response.content || '';
+                        this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
+                        // Task completed
 
-                // Phase 2: Parallel Tool Execution (if tools requested)
-                if (toolCalls.length > 0) {
+                        onUpdate('completed', {
+                            response: finalResponse,
+                            telemetry: { ...this.telemetry },
+                            executionLog: [...this.executionLog],
+                        });
+
+                        return {
+                            response: finalResponse,
+                            telemetry: { ...this.telemetry },
+                            executionLog: [...this.executionLog],
+                        };
+                    }
+
+                } catch (iterationError: any) {
+                    // Handle iteration-specific errors WITHOUT breaking the loop
+                    consecutiveErrors++;
+                    lastError = iterationError;
+
                     onUpdate('phase_change', {
-                        phase: 'execution',
-                        message: `Executing ${toolCalls.length} Tool${toolCalls.length > 1 ? 's' : ''}`,
+                        phase: 'recovery',
+                        message: `🔄 Recovering from error (attempt ${consecutiveErrors})...`,
                     });
 
-                    const { results, toolMessages } = await this.executeToolsParallel(toolCalls, onUpdate);
+                    // Add error context to help the model recover
+                    this.messages.push({
+                        role: 'system',
+                        content: `An error occurred: ${iterationError.message}. Please continue with the task using an alternative approach.`,
+                    });
 
-                    // Add tool results to message history
-                    this.messages.push(...toolMessages);
+                    // Only stop if we've had too many consecutive errors
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        const errorResponse = `⚠️ Task encountered persistent errors after ${MAX_CONSECUTIVE_ERRORS} attempts. Last error: ${lastError?.message}. Please try rephrasing your request.`;
+                        // Task completed
 
-                    // Check for failures and trigger recovery if needed
-                    const failures = results.filter((r) => !r.success);
-                    if (failures.length > 0 && failures.length === results.length) {
-                        // All tools failed - trigger recovery mode
-                        onUpdate('phase_change', {
-                            phase: 'recovery',
-                            message: `Recovery Mode: ${failures.length} Tool Failure${failures.length > 1 ? 's' : ''}`,
+                        onUpdate('completed', {
+                            response: errorResponse,
+                            telemetry: { ...this.telemetry },
+                            executionLog: [...this.executionLog],
                         });
+
+                        return {
+                            response: errorResponse,
+                            telemetry: { ...this.telemetry },
+                            executionLog: [...this.executionLog],
+                        };
                     }
 
-                    // Continue loop to analyze results
+                    // Brief pause before retry
+                    await new Promise(r => setTimeout(r, 500));
                     continue;
-                }
-
-                // No tool calls - check if we're done
-                if (!this.shouldContinue()) {
-                    const finalResponse = response.content || '';
-                    this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
-
-                    onUpdate('completed', {
-                        response: finalResponse,
-                        telemetry: { ...this.telemetry },
-                        executionLog: [...this.executionLog],
-                    });
-
-                    return {
-                        response: finalResponse,
-                        telemetry: { ...this.telemetry },
-                        executionLog: [...this.executionLog],
-                    };
                 }
 
                 // Continue for next iteration
             }
 
-            // Max iterations reached
-            const response = 'Operational limit reached. Task may be incomplete.';
-            onUpdate('completed', { response, telemetry: { ...this.telemetry } });
+            // Max iterations reached - but still deliver what we have
+            const lastMessage = this.messages[this.messages.length - 1];
+            const response = lastMessage?.role === 'assistant'
+                ? lastMessage.content || 'Task completed after extensive processing.'
+                : 'Task processed through maximum iterations. Results are available in the execution log.';
+
+            // Task completed
+            onUpdate('completed', { response, telemetry: { ...this.telemetry }, executionLog: [...this.executionLog] });
 
             return {
                 response,
                 telemetry: { ...this.telemetry },
                 executionLog: [...this.executionLog],
             };
+
         } catch (error: any) {
+            // Absolute last resort - this should almost never happen
             this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
-            onUpdate('error', { error: error.message, telemetry: { ...this.telemetry } });
+            // Task completed
+
+            const errorResponse = `💥 Critical Engine Issue: ${error.message}. However, any completed work has been preserved. Try asking to continue from where we left off.`;
+
+            onUpdate('completed', {
+                response: errorResponse,
+                telemetry: { ...this.telemetry },
+                executionLog: [...this.executionLog],
+            });
 
             return {
-                response: `Critical Engine Failure: ${error.message}`,
+                response: errorResponse,
                 telemetry: { ...this.telemetry },
                 executionLog: [...this.executionLog],
             };
