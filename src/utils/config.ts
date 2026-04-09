@@ -2,21 +2,21 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { existsSync } from 'fs';
 
-// Load environment from multiple possible locations
+// Load environment from multiple possible locations, starting with highest precedence
 const envPaths = [
-    path.join(process.cwd(), '.env'),
     path.join(process.cwd(), '.env.local'),
-    path.join(process.env.HOME || '', '.murphy', 'env'),
+    path.join(process.cwd(), '.env'),
+    path.join(process.env.USERPROFILE || process.env.HOME || '', '.murphy', 'env'),
 ];
 
 for (const envPath of envPaths) {
     if (existsSync(envPath)) {
+        // We do not break on the first find, we load in order of overrides (dotenv won't override existing env vars)
         dotenv.config({ path: envPath });
-        break;
     }
 }
 
-// Fallback to default .env
+// Fallback to default .env if not found above
 if (!process.env.NVIDIA_API_KEY) {
     dotenv.config();
 }
@@ -36,9 +36,23 @@ export const config = {
     // NVIDIA NIM Configuration
     nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
 
-    // Model IDs
-    kimiModel: process.env.KIMI_MODEL || 'moonshotai/kimi-k2-thinking',
-    qwenModel: process.env.QWEN_MODEL || 'qwen/qwen3-coder-480b-a35b-instruct',
+    // Model configuration
+    models: {
+        reasoning: {
+            id: process.env.KIMI_MODEL || 'moonshotai/kimi-k2-thinking',
+            temperature: 0.7,
+            maxTokens: 8192,
+            timeout: 120000,
+            client: 'kimi' as const,
+        },
+        execution: {
+            id: process.env.QWEN_MODEL || 'qwen/qwen3-coder-480b-a35b-instruct',
+            temperature: 0.1,
+            maxTokens: 16384,
+            timeout: 180000,
+            client: 'qwen' as const,
+        },
+    },
 
     // Execution settings
     defaultCwd: process.env.DEFAULT_CWD || process.cwd(),
@@ -82,8 +96,8 @@ export function logConfig(): void {
     console.log('═══════════════════════════════════════════════════════════');
     console.log('  MURPHY v3.0 PREDATOR CONFIGURATION');
     console.log('═══════════════════════════════════════════════════════════');
-    console.log(`  Kimi Model:    ${config.kimiModel}`);
-    console.log(`  Qwen Model:    ${config.qwenModel}`);
+    console.log(`  Kimi Model:    ${config.models.reasoning.id}`);
+    console.log(`  Qwen Model:    ${config.models.execution.id}`);
     console.log(`  Base URL:      ${config.nvidiaBaseUrl}`);
     console.log(`  Working Dir:   ${config.defaultCwd}`);
     console.log(`  Concurrent:    ${config.maxConcurrentTools} tools`);
@@ -105,26 +119,4 @@ if (config.debugMode) {
     }
 }
 
-// Predator Evolution Step 19
-
-// Predator Evolution Step 22
-
-// Predator Evolution Step 28
-
-// Predator Evolution Step 32
-
-// Predator Evolution Step 37
-
-// Predator Evolution Step 38
-
-// Predator Evolution Step 42
-
-// Predator Evolution Step 48
-
-// Predator Evolution Step 52
-
-// Predator Evolution Step 59
-
-// Predator Evolution Step 60
-
-// Predator Evolution Step 61
+export const MODEL_CONFIG = config.models;
