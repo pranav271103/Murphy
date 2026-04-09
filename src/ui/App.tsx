@@ -7,8 +7,6 @@ import React, {
     useMemo,
 } from 'react';
 import { Box, Text, useInput, useApp, Static } from 'ink';
-import Gradient from 'ink-gradient';
-import BigText from 'ink-big-text';
 import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry, stripXml } from '../agent/loop.js';
 import { SYSTEM_PROMPT } from '../agent/constants.js';
 
@@ -78,56 +76,6 @@ const PredatorTimer = memo<{ active: boolean }>(({ active }) => {
     return <Text bold>{elapsed}ms</Text>;
 });
 
-/**
- * CommandDetailTree - Collapsible tree showing full command details
- */
-const CommandDetailTree = memo<{ event: ToolExecutionEvent; isExpanded: boolean }>(({ event, isExpanded }) => {
-    if (!isExpanded) return null;
-    return (
-        <Box flexDirection="column" marginLeft={6} marginTop={1}>
-            <Box borderStyle="single" borderColor="gray" paddingX={1} flexDirection="column">
-                <Text color="gray" dimColor>Command: {event.name}</Text>
-                <Text color="cyan" dimColor>Arguments: {JSON.stringify(event.args, null, 2)}</Text>
-                {event.result && <Text color="green" dimColor>Result: {event.result.slice(0, 300)}</Text>}
-            </Box>
-        </Box>
-    );
-});
-
-/**
- * TreeNode - Displays a single tool execution in the hierarchy
- */
-const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean; isExpanded: boolean }>(
-    ({ event, isLast, isExpanded }) => {
-        const connector = isLast ? '└──' : '├──';
-        return (
-            <Box flexDirection="column">
-                <Box marginLeft={2}>
-                    <Text dimColor>{connector} </Text>
-                    {event.status === 'running' ? <PredatorSpinner active={true} /> : <Text color="green">✅</Text>}
-                    <Text bold> {event.name}</Text>
-                    <Text dimColor> ({event.duration}ms)</Text>
-                </Box>
-                <CommandDetailTree event={event} isExpanded={isExpanded} />
-            </Box>
-        );
-    }
-);
-
-/**
- * ToolExecutionTree - Living hierarchy of command execution
- */
-const ToolExecutionTree = memo<{ events: ToolExecutionEvent[] }>(({ events }) => {
-    if (events.length === 0) return null;
-    return (
-        <Box flexDirection="column" marginLeft={4} marginTop={1}>
-            <Text dimColor italic>├─ Execution Trace</Text>
-            {events.map((event, idx) => (
-                <TreeNode key={event.id} event={event} isLast={idx === events.length - 1} isExpanded={false} />
-            ))}
-        </Box>
-    );
-});
 
 /**
  * PredatorInputArea - Isolated input rendering to prevent global re-renders while typing

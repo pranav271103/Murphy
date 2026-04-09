@@ -1,5 +1,5 @@
 import { NVIDIAProvider, ModelType } from '../providers/nvidia.js';
-import { SYSTEM_PROMPT, MODEL_CONFIG } from '../agent/constants.js';
+import { MODEL_CONFIG } from '../agent/constants.js';
 import { tools } from '../tools/definitions.js';
 import { toolHandlers, ToolResult } from '../tools/index.js';
 import { performance } from 'perf_hooks';
@@ -275,47 +275,50 @@ export class AgentLoop {
 
     /**
      * Check if we should continue the loop
-     * v3.1 Upgrade: Smarter goal detection to prevent infinite loops
+     * v3.1.7 BULLETPROOF: Simple rules, zero hallucination loops
      */
+    private consecutiveNoToolIterations = 0;
+
     private shouldContinue(): boolean {
         const lastMessage = this.messages[this.messages.length - 1];
 
-        // 1. If last message is from user (fresh input), ALWAYS continue
+        // 1. If last message is from user, ALWAYS continue
         if (lastMessage.role === 'user') return true;
 
-        // 2. If last message is from a tool, ALWAYS continue (to process results)
+        // 2. If last message is from a tool, ALWAYS continue (process results)
         if (lastMessage.role === 'tool') return true;
 
         // 3. If assistant made tool calls, ALWAYS continue to execute them
         if (lastMessage.role === 'assistant' && lastMessage.tool_calls?.length) {
+            this.consecutiveNoToolIterations = 0;
             return true;
         }
 
-        // 4. Check for unfulfilled tool calls (count check)
+        // 4. Check for unfulfilled tool calls
         const totalToolCalls = this.messages
             .filter((m) => m.role === 'assistant' && m.tool_calls)
             .flatMap((m) => m.tool_calls || []).length;
         const totalToolResults = this.messages.filter((m) => m.role === 'tool').length;
-
         if (totalToolCalls > totalToolResults) return true;
 
-        // 5. GOAL COMPLETION DETECTION (v3.1)
-        if (lastMessage.role === 'assistant' && lastMessage.content) {
-            const content = lastMessage.content;
+        // 5. BULLETPROOF STOP: Assistant gave text with NO tool calls
+        //    and all previous tools are fulfilled → WE ARE DONE.
+        if (lastMessage.role === 'assistant' && !lastMessage.tool_calls?.length) {
+            this.consecutiveNoToolIterations++;
 
-            // Explicit termination signal
-            if (content.includes('TASK_COMPLETE')) return false;
+            // After reasoning (iteration 1), we MUST continue to execution phase once
+            // But if execution also produces no tools, STOP immediately
+            if (this.telemetry.iteration >= 2) {
+                return false;
+            }
 
-            // Heuristic detection: If we have content and NO tools in the last turn,
-            // and we've already had at least one reasoning/execution cycle, we're likely done.
-            // UNLESS it's a question (contains '?')
-            const isQuestion = content.includes('?') && !content.includes('TASK_COMPLETE');
-            if (!isQuestion && this.telemetry.iteration >= 1) {
+            // Safety: max 2 consecutive no-tool iterations ever
+            if (this.consecutiveNoToolIterations >= 2) {
                 return false;
             }
         }
 
-        // 6. Safety Break: If we have too many messages without progress, stop
+        // 6. Hard safety brake
         if (this.messages.length > 50) return false;
 
         return true;
@@ -333,6 +336,9 @@ export class AgentLoop {
         const startTimeTotal = performance.now();
         this.abortController = new AbortController();
         const signal = options?.signal || this.abortController.signal;
+
+        // Reset per-request state
+        this.consecutiveNoToolIterations = 0;
 
         // Add user message
         this.messages.push({ role: 'user', content: userInput });
@@ -565,6 +571,7 @@ export class AgentLoop {
             failedTools: 0,
         };
         this.abortController = null;
+        this.consecutiveNoToolIterations = 0;
     }
 }
 
