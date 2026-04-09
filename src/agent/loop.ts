@@ -57,13 +57,23 @@ export interface UpdatePayload {
  * Surgically extracts tool calls from malformed responses
  */
 const TEXT_TOOL_PATTERNS = [
-    // Pattern 1: XML-style tool_call tags
-    /<tool_call>[\s\S]*?<function=(\w+)(?:[\s\S]*?arguments=({[\s\S]*?}))?[\s\S]*?<\/tool_call>/g,
+    // Pattern 1: Flexible XML-style tool_call tags
+    /<tool_call>[\s\S]*?(?:<function=?([\w-]+)|function=([\w-]+))[\s\S]*?(?:arguments=?({[\s\S]*?})|arguments=({[\s\S]*?})|(?:<parameter=[\w-]+>([\s\S]*?)<\/parameter>)+)[\s\S]*?<\/tool_call>/gi,
     // Pattern 2: Markdown code blocks with tool syntax
-    /```(?:tool|function)?\s*\n?(\w+)\s*\n([\s\S]*?)```/g,
+    /```(?:tool|function)?\s*\n?([\w-]+)\s*\n([\s\S]*?)```/g,
     // Pattern 3: JSON-like tool invocations
-    /\{\s*"?tool"?:\s*"(\w+)"\s*,\s*"?arguments"?:\s*(\{[\s\S]*?\})\s*\}/g,
+    /\{\s*"?tool"?:\s*"([\w-]+)"\s*,\s*"?arguments"?:\s*(\{[\s\S]*?\})\s*\}/g,
 ];
+
+/**
+ * Utility to strip XML tags from content for clean UI display
+ */
+export const stripXml = (text: string): string => {
+    return text
+        .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+};
 
 /**
  * Murphy Agent Loop - The High-Speed Coding Predator
@@ -109,23 +119,38 @@ export class AgentLoop {
         const toolCalls: any[] = [];
 
         for (const pattern of TEXT_TOOL_PATTERNS) {
-            const regex = new RegExp(pattern.source, 'g');
+            const regex = new RegExp(pattern.source, 'gi');
             let match;
 
             while ((match = regex.exec(text)) !== null) {
-                const name = match[1]?.trim();
-                const argsStr = match[2]?.trim() || '{}';
+                // Determine function name from any of the capture groups
+                const name = (match[1] || match[2] || match[match.length - 1])?.trim();
+                
+                // Handle different argument formats
+                let argsBlob = match[3] || match[4] || match[5] || '{}';
+                
+                // Special case for <parameter=NAME>VALUE</parameter>
+                if (text.includes('<parameter=')) {
+                    const paramRegex = /<parameter=([\w-]+)>([\s\S]*?)<\/parameter>/gi;
+                    const params: Record<string, any> = {};
+                    let pMatch;
+                    const toolBlock = match[0];
+                    while ((pMatch = paramRegex.exec(toolBlock)) !== null) {
+                        params[pMatch[1]] = pMatch[2].trim();
+                    }
+                    if (Object.keys(params).length > 0) {
+                        argsBlob = JSON.stringify(params);
+                    }
+                }
 
                 if (!name) continue;
 
                 try {
-                    // Try to parse arguments as JSON
                     let args = {};
                     try {
-                        args = JSON.parse(argsStr);
+                        args = JSON.parse(argsBlob);
                     } catch {
-                        // If not valid JSON, treat as raw string
-                        args = { raw: argsStr };
+                        args = { raw: argsBlob };
                     }
 
                     toolCalls.push({
@@ -137,7 +162,7 @@ export class AgentLoop {
                         },
                     });
                 } catch (e) {
-                    // Silently skip malformed matches - predator doesn't complain
+                    // Skip
                 }
             }
         }

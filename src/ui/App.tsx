@@ -9,7 +9,7 @@ import React, {
 import { Box, Text, useInput, useApp, Static } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
-import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry } from '../agent/loop.js';
+import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry, stripXml } from '../agent/loop.js';
 import { SYSTEM_PROMPT } from '../agent/constants.js';
 
 // ============================================================================
@@ -164,7 +164,7 @@ const MessageItem = memo<{ msg: Message }>(({ msg }) => {
         <Box marginBottom={0} flexDirection="column">
             <Box>
                 <Text bold color={roleColor}>{roleLabel}:</Text>
-                <Text> {msg.content.length > 200 ? msg.content.slice(0, 197) + '...' : msg.content}</Text>
+                <Text> {stripXml(msg.content).length > 200 ? stripXml(msg.content).slice(0, 197) + '...' : stripXml(msg.content)}</Text>
             </Box>
         </Box>
     );
@@ -195,7 +195,7 @@ const StreamingArea = memo<{ content: string; active: boolean }>(({ content, act
         <Box marginTop={0} flexDirection="column" height={3} overflow="hidden">
             <Text bold color="cyan">⚡ STREAMING:</Text>
             <Box marginLeft={2}>
-                <Text dimColor>{content.length > 150 ? '...' + content.slice(-150) : content}</Text>
+                <Text dimColor>{stripXml(content).length > 150 ? '...' + stripXml(content).slice(-150) : stripXml(content)}</Text>
                 {active && <PredatorSpinner active={true} />}
             </Box>
         </Box>
