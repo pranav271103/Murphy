@@ -15,3 +15,8 @@ commit_marathon.py
 
 # Brain/Artifacts
 brain/
+
+# Local Sessions
+.murphy_session.json
+test.js
+*.bak
