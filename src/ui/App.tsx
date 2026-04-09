@@ -6,7 +6,7 @@ import React, {
     memo,
     useMemo,
 } from 'react';
-import { Box, Text, useInput, useApp } from 'ink';
+import { Box, Text, useInput, useApp, Static } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
 import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry } from '../agent/loop.js';
@@ -152,6 +152,8 @@ const PredatorInputArea = memo<{ input: string; status: string }>(({ input, stat
     </Box>
 ));
 
+const BRANDING_STABLE = [{ id: 'murphy-branding-v1' }];
+
 /**
  * MessageItem - Single message with stable rendering
  */
@@ -159,29 +161,23 @@ const MessageItem = memo<{ msg: Message }>(({ msg }) => {
     const roleColor = msg.role === 'user' ? 'green' : 'cyan';
     const roleLabel = msg.role === 'user' ? '❯ YOU' : '⚡ MURPHY';
     return (
-        <Box marginBottom={1} flexDirection="column">
+        <Box marginBottom={0} flexDirection="column">
             <Box>
                 <Text bold color={roleColor}>{roleLabel}:</Text>
-                <Text> {msg.content}</Text>
+                <Text> {msg.content.length > 200 ? msg.content.slice(0, 197) + '...' : msg.content}</Text>
             </Box>
-            {msg.tools && msg.tools.length > 0 && <ToolExecutionTree events={msg.tools} />}
         </Box>
     );
 });
 
 /**
- * MessageHistory - Standard Box-based rendering with extreme height stability
+ * MessageHistory - Extreme stability
  */
 const MessageHistory = memo<{ messages: Message[]; maxVisible?: number }>(
-    ({ messages, maxVisible = 4 }) => {
+    ({ messages, maxVisible = 2 }) => {
         const visibleMessages = useMemo(() => messages.slice(-maxVisible), [messages, maxVisible]);
         return (
-            <Box flexDirection="column">
-                {messages.length > maxVisible && (
-                    <Box marginBottom={1} justifyContent="center">
-                        <Text dimColor italic>... {messages.length - maxVisible} prev interactions hidden ...</Text>
-                    </Box>
-                )}
+            <Box flexDirection="column" flexGrow={0}>
                 {visibleMessages.map((msg, idx) => (
                     <MessageItem key={`${msg.timestamp}_${idx}`} msg={msg} />
                 ))}
@@ -191,15 +187,15 @@ const MessageHistory = memo<{ messages: Message[]; maxVisible?: number }>(
 );
 
 /**
- * StreamingArea - Stable height to prevent downward drift
+ * StreamingArea - Locked height
  */
 const StreamingArea = memo<{ content: string; active: boolean }>(({ content, active }) => {
     if (!active && !content) return null;
     return (
-        <Box marginTop={1} flexDirection="column" height={5} overflow="hidden">
-            <Box><Text bold color="cyan">⚡ MURPHY:</Text></Box>
-            <Box marginLeft={2} flexGrow={1}>
-                <Text>{content.length > 300 ? '...' + content.slice(-300) : content}</Text>
+        <Box marginTop={0} flexDirection="column" height={3} overflow="hidden">
+            <Text bold color="cyan">⚡ STREAMING:</Text>
+            <Box marginLeft={2}>
+                <Text dimColor>{content.length > 150 ? '...' + content.slice(-150) : content}</Text>
                 {active && <PredatorSpinner active={true} />}
             </Box>
         </Box>
@@ -207,24 +203,16 @@ const StreamingArea = memo<{ content: string; active: boolean }>(({ content, act
 });
 
 /**
- * ActiveToolPanel - Real-time parallel pipeline display
+ * ActiveToolPanel - Ultra compact
  */
 const ActiveToolPanel = memo<{ tools: ToolExecutionEvent[]; phase?: string }>(({ tools, phase }) => {
     if (tools.length === 0 && !phase) return null;
     return (
-        <Box flexDirection="column" marginLeft={4} marginTop={1} paddingX={1} borderStyle="bold" borderColor="yellow">
-            <Box marginBottom={1}>
-                <Text bold color="cyan">⚡ ACTIVE EXECUTION</Text>
-                {phase && <Text color="yellow"> | {phase}</Text>}
-            </Box>
-            <Box flexDirection="column">
-                {tools.map((tool) => (
-                    <Box key={tool.id} marginLeft={2}>
-                        {tool.status === 'running' ? <PredatorSpinner active={true} /> : <Text color="green">✓</Text>}
-                        <Text bold> {tool.name}</Text>
-                    </Box>
-                ))}
-            </Box>
+        <Box flexDirection="row" marginTop={0} paddingX={1} borderStyle="single" borderColor="yellow" height={3}>
+            <Text bold color="yellow">EXE: </Text>
+            <Text wrap="truncate-end" dimColor>
+                {phase || 'Processing'} | {tools.length} active
+            </Text>
         </Box>
     );
 });
@@ -234,29 +222,17 @@ const TelemetryBar = memo<{
     isProcessing: boolean;
     sessionStats: SessionStats;
 }>(({ telemetry, isProcessing, sessionStats }) => {
-    const statusColor = telemetry?.failedTools ? 'yellow' : telemetry ? 'cyan' : 'green';
     return (
-        <Box height={3} borderStyle="double" borderColor={statusColor as any} paddingX={2} flexDirection="row" alignItems="center">
-            <Box width="20%">
-                <Text color={statusColor as any} bold>{isProcessing ? '⚡ ACTIVE' : '● READY'}</Text>
-                <Text dimColor> | {sessionStats.messagesSent}m</Text>
-            </Box>
-            <Box width="65%" justifyContent="center">
-                {telemetry ? (
-                    <Text wrap="truncate">
-                        <Text color="cyan">IT:</Text><Text bold>{telemetry.iteration}</Text>
-                        <Text dimColor> | </Text>
-                        <PredatorTimer active={isProcessing} />
-                        <Text dimColor> | </Text>
-                        <Text color="green">OK:{telemetry.completedTools}</Text>
-                    </Text>
-                ) : (
-                    <Text color="gray" dimColor>MURPHY v3.1.2 PREDATOR // STANDBY</Text>
-                )}
-            </Box>
-            <Box width="15%" justifyContent="flex-end">
-                <Text dimColor>{isProcessing ? 'RUN' : 'WAIT'}</Text>
-            </Box>
+        <Box height={1} paddingX={1} flexDirection="row" alignItems="center">
+            <Text color="cyan" bold>{isProcessing ? '⚡ RUN' : '● OK'}</Text>
+            <Text dimColor> | {sessionStats.messagesSent}m | </Text>
+            {telemetry ? (
+                <Text color="green">IT:{telemetry.iteration} | OK:{telemetry.completedTools}</Text>
+            ) : (
+                <Text color="gray" dimColor>STANDBY</Text>
+            )}
+            <Box flexGrow={1} />
+            <PredatorTimer active={isProcessing} />
         </Box>
     );
 });
@@ -376,23 +352,26 @@ const App: React.FC = () => {
     }, [handleSend, exit, isPasteMode, isProcessingInput]));
 
     return (
-        <Box flexDirection="column" width="100%" minHeight={20}>
-            <Box flexDirection="column" alignItems="center" marginBottom={1} width="100%">
-                <Gradient name="retro">
-                    <BigText text="MURPHY" font="block" />
-                </Gradient>
-                <Box marginTop={-1}>
-                    <Text italic color="cyan" dimColor>═══ THE HIGH-SPEED CODING PREDATOR ═══</Text>
-                </Box>
-            </Box>
-            <Box flexDirection="column" borderStyle="singleDouble" borderColor="cyan" paddingX={2} paddingY={1} minHeight={12}>
-                <MessageHistory messages={messages} maxVisible={3} />
-                {messages.length === 0 && (
-                    <Box padding={2} justifyContent="center" flexDirection="column" alignItems="center">
-                        <Text color="gray">Predator Online. Feed me commands.</Text>
-                        <Text dimColor color="cyan">exit | clear | Ctrl+C</Text>
+        <Box flexDirection="column" width="100%">
+            <Static items={BRANDING_STABLE}>
+                {(item) => (
+                    <Box key={item.id} flexDirection="column" alignItems="center" marginBottom={1}>
+                        <Gradient name="retro">
+                            <BigText text="MURPHY" font="block" />
+                        </Gradient>
+                        <Text italic color="cyan" dimColor>═══ THE HIGH-SPEED CODING PREDATOR ═══</Text>
                     </Box>
                 )}
+            </Static>
+
+            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} height={10}>
+                <MessageHistory messages={messages} maxVisible={3} />
+                {messages.length === 0 && (
+                    <Box padding={1} justifyContent="center" flexDirection="column" alignItems="center">
+                        <Text color="gray">Deploy instructions...</Text>
+                    </Box>
+                )}
+                <Box flexGrow={1} />
                 <StreamingArea content={streamingContent} active={status !== 'ready'} />
                 <ActiveToolPanel tools={activeTools} phase={currentPhase} />
             </Box>
