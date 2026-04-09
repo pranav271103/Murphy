@@ -3,14 +3,60 @@ import React from 'react';
 import { render } from 'ink';
 import App from './ui/App.js';
 import { validateConfig, logConfig } from './utils/config.js';
+import { clearSession } from './utils/session.js';
 
 /**
- * Murphy v3.0 - The High-Speed Coding Predator
+ * Murphy v3.2 - The High-Speed Coding Predator
  *
  * Entry point for the Murphy CLI application.
- * Initializes the Ink-based TUI with optimized settings.
+ * Improvements:
+ * - Better error handling
+ * - Startup flags (--new, --help)
+ * - Graceful shutdown
  */
+
 async function main() {
+    const args = process.argv.slice(2);
+
+    // Handle startup flags
+    if (args.includes('--help') || args.includes('-h')) {
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('  MURPHY - The High-Speed Coding Predator');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('');
+        console.log('Usage: murphy [options]');
+        console.log('');
+        console.log('Options:');
+        console.log('  --new, -n       Start a fresh session (clear history)');
+        console.log('  --help, -h      Show this help message');
+        console.log('  --version, -v   Show version');
+        console.log('');
+        console.log('Commands (within Murphy):');
+        console.log('  /help           Show available commands');
+        console.log('  /new            Start a new chat');
+        console.log('  /clear          Clear the screen');
+        console.log('  /reset          Reset agent and clear history');
+        console.log('  exit            Exit Murphy');
+        console.log('');
+        console.log('Keyboard shortcuts:');
+        console.log('  Ctrl+C          Exit when ready, abort when working');
+        console.log('  ESC             Abort current operation');
+        console.log('  ↑/↓             Navigate command history');
+        console.log('  Ctrl+L          Clear screen');
+        console.log('═══════════════════════════════════════════════════════════');
+        process.exit(0);
+    }
+
+    if (args.includes('--version') || args.includes('-v')) {
+        console.log('Murphy v3.2.0');
+        process.exit(0);
+    }
+
+    if (args.includes('--new') || args.includes('-n')) {
+        clearSession(process.cwd());
+        console.log('🗑️  Previous session cleared. Starting fresh...\n');
+    }
+
     // Validate configuration before starting
     const validation = validateConfig();
 
@@ -31,29 +77,34 @@ async function main() {
     // Show configuration banner
     logConfig();
 
-    // Start the Ink application with optimizations
+    // Start the Ink application
     const { waitUntilExit } = render(
         React.createElement(App),
         {
-            // Performance optimizations
             stdout: process.stdout,
             stdin: process.stdin,
-            // Patch console to not interfere with Ink
             patchConsole: true,
-            // Exit on Ctrl+C
-            exitOnCtrlC: true,
+            exitOnCtrlC: false, // We handle this ourselves
         }
     );
 
     // Handle graceful shutdown
-    process.on('SIGINT', () => {
-        console.log('\n\n⚡ Predator disengaging...');
+    const shutdown = (signal: string) => {
+        console.log(`\n\n⚡ ${signal} received. Shutting down gracefully...`);
         process.exit(0);
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+    // Handle uncaught errors
+    process.on('uncaughtException', (error) => {
+        console.error('\n💥 Uncaught Exception:', error.message);
+        console.error('Murphy will attempt to continue, but may be unstable.');
     });
 
-    process.on('SIGTERM', () => {
-        console.log('\n\n⚡ Predator shutting down...');
-        process.exit(0);
+    process.on('unhandledRejection', (reason) => {
+        console.error('\n💥 Unhandled Promise Rejection:', reason);
     });
 
     // Wait for app to exit
@@ -62,6 +113,7 @@ async function main() {
 
 // Execute main with error handling
 main().catch((error) => {
-    console.error('\n💥 CRITICAL FAILURE:', error);
+    console.error('\n💥 CRITICAL FAILURE:', error.message);
+    console.error('\nPlease report this issue at: https://github.com/pranav271103/Murphy/issues');
     process.exit(1);
 });
