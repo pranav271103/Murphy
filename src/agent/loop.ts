@@ -54,22 +54,18 @@ export interface UpdatePayload {
 }
 
 /**
- * The Unbreakable Engine: Text-to-Tool Parser
- * Surgically extracts tool calls from malformed responses
+ * Text-to-Tool Parser - Extracts tool calls from malformed responses
  */
 const TEXT_TOOL_PATTERNS = [
-    // Pattern 1: Flexible XML-style tool_call tags
-    /<tool_call>[\s\S]*?(?:<function=?([\w-]+)|function=([\w-]+))[\s\S]*?(?:arguments=?({[\s\S]*?})|arguments=({[\s\S]*?})|(?:<parameter=[\w-]+>([\s\S]*?)<\/parameter>)+)[\s\S]*?<\/tool_call>/gi,
-    // Pattern 2: Markdown code blocks with tool syntax
-    /```(?:tool|function)?\s*\n?([\w-]+)\s*\n([\s\S]*?)```/g,
-    // Pattern 3: JSON-like tool invocations
-    /\{\s*"?tool"?:\s*"([\w-]+)"\s*,\s*"?arguments"?:\s*(\{[\s\S]*?\})\s*\}/g,
+    /<tool_call>\s*(?:<function=)?([\w-]+)>?\s*(?:<arguments=)?([\s\S]*?)(?:<\/arguments>)?(?:<\/tool_call>)/g,
+    /<tool_call>\s*```(?:json)?\s*\{\s*"name"\s*:\s*"([\w-]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}\s*```\s*<\/tool_call>/gi
 ];
 
 /**
- * Utility to strip XML tags from content for clean UI display
+ * Strip XML tags from content for clean UI display
  */
 export const stripXml = (text: string): string => {
+    if (!text) return '';
     return text
         .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
         .replace(/<[^>]+>/g, '')
@@ -79,28 +75,34 @@ export const stripXml = (text: string): string => {
 /**
  * Murphy Agent Loop - The High-Speed Coding Predator
  *
- * Architecture:
- * 1. DUAL-MODEL ORCHESTRATION: Kimi K2 for reasoning, Qwen3 for execution
- * 2. PARALLEL PIPELINE: Promise.all for concurrent tool execution
- * 3. AUTO-RECOVERY: Self-healing when tools fail
- * 4. ZERO-STALL: Text-to-Tool fallback ensures loop never stalls
+ * Key Features:
+ * - Dual-model orchestration (Kimi K2 for reasoning, Qwen3 for execution)
+ * - Parallel tool execution
+ * - Auto-recovery from errors
+ * - User abort support
+ * - Proper error boundaries
  */
 export class AgentLoop {
     private provider: NVIDIAProvider;
     private messages: Message[] = [];
     private telemetry: LoopTelemetry;
     private executionLog: ToolExecutionEvent[] = [];
-    // Effectively unlimited - only user can stop the task
-    private readonly MAX_ITERATIONS = 1000;
-    private readonly MAX_RETRIES = 3;
+    private readonly MAX_ITERATIONS = 100;
+    private readonly MAX_RETRIES = 2;
     private abortController: AbortController | null = null;
+    private isAborted = false;
+
     public getIsProcessing(): boolean {
-        return this.abortController !== null && !this.abortController.signal.aborted;
+        return this.abortController !== null && !this.isAborted;
     }
 
-    constructor(systemPrompt: string) {
+    constructor(systemPrompt: string, initialMessages?: Message[]) {
         this.provider = new NVIDIAProvider();
-        this.messages = [{ role: 'system', content: systemPrompt }];
+        if (initialMessages && initialMessages.length > 0) {
+            this.messages = [...initialMessages];
+        } else {
+            this.messages = [{ role: 'system', content: systemPrompt }];
+        }
         this.telemetry = {
             iteration: 0,
             phase: 'reasoning',
@@ -112,9 +114,12 @@ export class AgentLoop {
         };
     }
 
+    public getMessages(): Message[] {
+        return [...this.messages];
+    }
+
     /**
-     * The Unbreakable Parser: Extracts tool calls from any text format
-     * Never let the loop stall on malformed responses
+     * Extract tool calls from text as fallback
      */
     private parseTextToolCalls(text: string): any[] {
         const toolCalls: any[] = [];
@@ -124,25 +129,8 @@ export class AgentLoop {
             let match;
 
             while ((match = regex.exec(text)) !== null) {
-                // Determine function name from any of the capture groups
-                const name = (match[1] || match[2] || match[match.length - 1])?.trim();
-                
-                // Handle different argument formats
-                let argsBlob = match[3] || match[4] || match[5] || '{}';
-                
-                // Special case for <parameter=NAME>VALUE</parameter>
-                if (text.includes('<parameter=')) {
-                    const paramRegex = /<parameter=([\w-]+)>([\s\S]*?)<\/parameter>/gi;
-                    const params: Record<string, any> = {};
-                    let pMatch;
-                    const toolBlock = match[0];
-                    while ((pMatch = paramRegex.exec(toolBlock)) !== null) {
-                        params[pMatch[1]] = pMatch[2].trim();
-                    }
-                    if (Object.keys(params).length > 0) {
-                        argsBlob = JSON.stringify(params);
-                    }
-                }
+                const name = match[1]?.trim();
+                let argsBlob = match[2] || '{}';
 
                 if (!name) continue;
 
@@ -163,7 +151,7 @@ export class AgentLoop {
                         },
                     });
                 } catch (e) {
-                    // Skip
+                    // Skip malformed
                 }
             }
         }
@@ -172,52 +160,90 @@ export class AgentLoop {
     }
 
     /**
-     * Execute a single tool with automatic retry and recovery
+     * Execute a single tool with retry and recovery
      */
     private async executeTool(
         toolCall: any,
-        onUpdate: (type: UpdateType, data: any) => void
+        onUpdate: (type: UpdateType, data: any) => void,
+        askPermission?: (tool: string, args: any) => Promise<boolean>,
+        options?: { signal?: AbortSignal }
     ): Promise<ToolResult> {
         const event: ToolExecutionEvent = {
-            id: toolCall.id,
-            name: toolCall.function.name,
-            args: JSON.parse(toolCall.function.arguments || '{}'),
+            id: toolCall.id || `tool_${Date.now()}`,
+            name: (toolCall.function?.name || 'unknown').replace(/[^a-zA-Z0-9_]/g, ''),
+            args: {},
             status: 'pending',
             duration: 0,
             startTime: performance.now(),
             retryCount: 0,
         };
 
+        // Parse args safely
+        try {
+            event.args = JSON.parse(toolCall.function?.arguments || '{}');
+        } catch {
+            event.args = { raw: toolCall.function?.arguments };
+        }
+
         this.executionLog.push(event);
         onUpdate('tool_queued', { event });
+
+        // Check for abort
+        if (options?.signal?.aborted || this.isAborted) {
+            event.status = 'failure';
+            event.error = 'Aborted by user';
+            event.duration = Math.round(performance.now() - event.startTime);
+            onUpdate('tool_failed', { event, error: 'Aborted' });
+            return { success: false, error: 'Aborted by user', duration: event.duration, toolCallId: toolCall.id };
+        }
 
         const handler = (toolHandlers as any)[event.name];
         if (!handler) {
             event.status = 'failure';
-            event.error = `Unknown tool: ${event.name}`;
+            event.error = `Unknown tool: '${event.name}' (Length: ${event.name.length}, type: ${typeof event.name}). Handlers: ${Object.keys(toolHandlers || {}).join(',')}`;
             event.duration = Math.round(performance.now() - event.startTime);
             onUpdate('tool_failed', { event });
-            return { success: false, error: event.error, duration: event.duration };
+            return { success: false, error: event.error, duration: event.duration, toolCallId: toolCall.id };
         }
 
-        // Execute with retry logic
+        // Permission check for dangerous tools
+        const requiresPermission = ['run_command', 'delete_file', 'edit_file', 'write_file'].includes(event.name);
+        if (requiresPermission && askPermission) {
+            onUpdate('phase_change', { phase: 'waiting', message: `⏸️  Waiting for permission: ${event.name}` });
+            const allowed = await askPermission(event.name, event.args);
+            if (!allowed) {
+                event.status = 'failure';
+                event.error = 'Permission denied by user';
+                onUpdate('tool_failed', { event });
+                return { success: false, error: event.error, duration: 0, toolCallId: toolCall.id };
+            }
+        }
+
+        // Execute with retry
         let lastError: string | undefined;
         for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+            if (options?.signal?.aborted || this.isAborted) {
+                event.status = 'failure';
+                event.error = 'Aborted by user';
+                event.duration = Math.round(performance.now() - event.startTime);
+                onUpdate('tool_failed', { event, error: 'Aborted' });
+                return { success: false, error: 'Aborted by user', duration: event.duration, toolCallId: toolCall.id };
+            }
+
             event.retryCount = attempt;
             event.status = 'running';
             onUpdate('tool_start', { event, attempt });
 
             try {
-                const args = JSON.parse(toolCall.function.arguments || '{}');
-                const result = await handler(args);
+                const result = await handler(event.args, { signal: options?.signal });
 
                 event.status = 'success';
-                event.result = String(result);
+                event.result = String(result).slice(0, 5000); // Limit stored result
                 event.duration = Math.round(performance.now() - event.startTime);
 
                 this.telemetry.completedTools++;
                 this.telemetry.activeTools--;
-                onUpdate('tool_complete', { event, result });
+                onUpdate('tool_complete', { event, result: String(result).slice(0, 1000) });
 
                 return {
                     success: true,
@@ -226,17 +252,16 @@ export class AgentLoop {
                     toolCallId: toolCall.id,
                 };
             } catch (error: any) {
-                lastError = error.message;
+                lastError = error.message || 'Unknown error';
                 event.error = lastError;
 
                 if (attempt < this.MAX_RETRIES) {
-                    // Brief pause before retry (exponential backoff)
-                    await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
+                    await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
                 }
             }
         }
 
-        // All retries exhausted - mark as failed but try recovery
+        // All retries failed
         event.status = 'failure';
         event.duration = Math.round(performance.now() - event.startTime);
         this.telemetry.failedTools++;
@@ -253,20 +278,31 @@ export class AgentLoop {
     }
 
     /**
-     * Execute tools in parallel using Promise.all for maximum speed
+     * Execute tools in parallel
      */
     private async executeToolsParallel(
         toolCalls: any[],
-        onUpdate: (type: UpdateType, data: any) => void
+        onUpdate: (type: UpdateType, data: any) => void,
+        askPermission?: (tool: string, args: any) => Promise<boolean>,
+        options?: { signal?: AbortSignal }
     ): Promise<{ results: ToolResult[]; toolMessages: Message[] }> {
         this.telemetry.activeTools += toolCalls.length;
 
-        const promises = toolCalls.map((tc) => this.executeTool(tc, onUpdate));
-        const results = await Promise.all(promises);
+        // Execute with concurrency limit
+        const results: ToolResult[] = [];
+        const batchSize = 5; // Limit concurrent executions
+
+        for (let i = 0; i < toolCalls.length; i += batchSize) {
+            const batch = toolCalls.slice(i, i + batchSize);
+            const batchResults = await Promise.all(
+                batch.map((tc) => this.executeTool(tc, onUpdate, askPermission, options))
+            );
+            results.push(...batchResults);
+        }
 
         const toolMessages: Message[] = results.map((result) => ({
             role: 'tool',
-            content: result.success ? result.content! : `Error: ${result.error}`,
+            content: result.success ? result.content!.slice(0, 10000) : `Error: ${result.error}`,
             tool_call_id: result.toolCallId!,
         }));
 
@@ -274,75 +310,88 @@ export class AgentLoop {
     }
 
     /**
-     * Check if we should continue the loop
-     * v3.1.7 BULLETPROOF: Simple rules, zero hallucination loops
+     * Check if loop should continue
      */
     private consecutiveNoToolIterations = 0;
 
     private shouldContinue(): boolean {
         const lastMessage = this.messages[this.messages.length - 1];
+        if (!lastMessage) return false;
 
-        // 1. If last message is from user, ALWAYS continue
+        // Continue if user just sent a message
         if (lastMessage.role === 'user') return true;
 
-        // 2. If last message is from a tool, ALWAYS continue (process results)
+        // Continue if tool results need processing
         if (lastMessage.role === 'tool') return true;
 
-        // 3. If assistant made tool calls, ALWAYS continue to execute them
+        // Continue if assistant made tool calls
         if (lastMessage.role === 'assistant' && lastMessage.tool_calls?.length) {
             this.consecutiveNoToolIterations = 0;
             return true;
         }
 
-        // 4. Check for unfulfilled tool calls
+        // Check for unfulfilled tool calls
         const totalToolCalls = this.messages
             .filter((m) => m.role === 'assistant' && m.tool_calls)
             .flatMap((m) => m.tool_calls || []).length;
         const totalToolResults = this.messages.filter((m) => m.role === 'tool').length;
         if (totalToolCalls > totalToolResults) return true;
 
-        // 5. BULLETPROOF STOP: Assistant gave text with NO tool calls
-        //    and all previous tools are fulfilled → WE ARE DONE.
+        // Stop if assistant gave text with no tools twice in a row
         if (lastMessage.role === 'assistant' && !lastMessage.tool_calls?.length) {
             this.consecutiveNoToolIterations++;
-
-            // After reasoning (iteration 1), we MUST continue to execution phase once
-            // But if execution also produces no tools, STOP immediately
-            if (this.telemetry.iteration >= 2) {
-                return false;
-            }
-
-            // Safety: max 2 consecutive no-tool iterations ever
             if (this.consecutiveNoToolIterations >= 2) {
                 return false;
             }
         }
 
-        // 6. Hard safety brake
+        // Safety brake
         if (this.messages.length > 50) return false;
+        if (this.telemetry.iteration >= this.MAX_ITERATIONS) return false;
 
         return true;
     }
 
     /**
-     * Main processing loop - The UNBREAKABLE Predator's Brain
-     * NEVER exits until task is fully delivered to user
+     * Main processing loop with proper abort support
      */
     async process(
         userInput: string,
         onUpdate: (type: UpdateType, data: any) => void,
+        askPermission?: (tool: string, args: any) => Promise<boolean>,
         options?: { signal?: AbortSignal }
     ): Promise<{ response: string; telemetry: LoopTelemetry; executionLog: ToolExecutionEvent[] }> {
         const startTimeTotal = performance.now();
         this.abortController = new AbortController();
-        const signal = options?.signal || this.abortController.signal;
+        this.isAborted = false;
 
-        // Reset per-request state
+        // Listen to external abort signal
+        if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+                this.abort();
+            });
+        }
+
+        const signal = this.abortController.signal;
+
+        // Reset state
         this.consecutiveNoToolIterations = 0;
+        this.executionLog = [];
+
+        // Check for simple greetings
+        const userInputLower = userInput.trim().toLowerCase();
+        const socialGreetings = ['hi', 'hello', 'hey', 'who are you', 'how are you', 'what are you'];
+        if (socialGreetings.includes(userInputLower)) {
+            const response = "I am MURPHY, the High-Speed Coding Predator.\n\nI can help you with:\n- Writing and editing code\n- Running commands\n- Searching and analyzing files\n- Web requests\n\nWhat would you like to build?";
+            this.messages.push({ role: 'user', content: userInput });
+            this.messages.push({ role: 'assistant', content: response });
+            onUpdate('completed', { response, telemetry: this.telemetry, executionLog: [] });
+            return { response, telemetry: this.telemetry, executionLog: [] };
+        }
 
         // Add user message
         this.messages.push({ role: 'user', content: userInput });
-        onUpdate('phase_change', { phase: 'reasoning', message: '🧠 Strategic Planning Phase' });
+        onUpdate('phase_change', { phase: 'reasoning', message: '🧠 Planning' });
 
         let lastError: Error | null = null;
         let consecutiveErrors = 0;
@@ -350,13 +399,22 @@ export class AgentLoop {
 
         try {
             while (this.telemetry.iteration < this.MAX_ITERATIONS) {
-                if (signal.aborted) {
-                    // Task completed
+                // Check abort
+                if (signal.aborted || this.isAborted) {
+                    this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
                     return {
-                        response: '⏹️ Task stopped by user. Progress was saved.',
+                        response: '⏹️ Task aborted.',
                         telemetry: { ...this.telemetry },
                         executionLog: [...this.executionLog],
                     };
+                }
+
+                // Prune old context if needed
+                if (this.messages.length > 40) {
+                    onUpdate('phase_change', { phase: 'reasoning', message: '🧹 Pruning context...' });
+                    const sysPrompt = this.messages[0];
+                    const recentMsgs = this.messages.slice(-25);
+                    this.messages = [sysPrompt, ...recentMsgs];
                 }
 
                 this.telemetry.iteration++;
@@ -369,22 +427,24 @@ export class AgentLoop {
                 onUpdate('model_start', { phase, iteration: this.telemetry.iteration });
 
                 try {
-                    // Phase 1: Strategic Planning (Kimi K2) or Execution (Qwen3)
+                    // Get completion
                     const modelStartTime = performance.now();
                     const response = await this.provider.getCompletion({
                         messages: this.messages,
                         modelType: phase,
                         tools: phase === 'execution' ? tools : undefined,
-                        temperature: phase === 'reasoning' ? MODEL_CONFIG.kimi.temperature : MODEL_CONFIG.qwen.temperature,
-                        maxTokens: phase === 'reasoning' ? MODEL_CONFIG.kimi.maxTokens : MODEL_CONFIG.qwen.maxTokens,
+                        temperature: phase === 'reasoning' ? MODEL_CONFIG.reasoning.temperature : MODEL_CONFIG.execution.temperature,
+                        maxTokens: phase === 'reasoning' ? MODEL_CONFIG.reasoning.maxTokens : MODEL_CONFIG.execution.maxTokens,
                         onStream: (chunk) => {
-                            onUpdate('model_stream', { chunk, phase });
+                            if (!signal.aborted) {
+                                onUpdate('model_stream', { chunk, phase });
+                            }
                         },
                         signal,
                     });
 
                     this.telemetry.modelLatency = Math.round(performance.now() - modelStartTime);
-                    consecutiveErrors = 0; // Reset error counter on success
+                    consecutiveErrors = 0;
 
                     if (!response) {
                         throw new Error('Empty response from model');
@@ -396,21 +456,13 @@ export class AgentLoop {
                         content: response.content,
                     });
 
-                    // Handle BOTH official tool_calls and manual text fallbacks
+                    // Extract tool calls
                     let toolCalls = response.tool_calls || [];
-
-                    // The Unbreakable Fallback: Parse text if no official tool calls
                     if (toolCalls.length === 0 && response.content) {
                         toolCalls = this.parseTextToolCalls(response.content);
-                        if (toolCalls.length > 0) {
-                            onUpdate('phase_change', {
-                                phase: 'recovery',
-                                message: '🔧 Text-to-Tool Fallback Activated',
-                            });
-                        }
                     }
 
-                    // Add assistant message to history
+                    // Add assistant message
                     const assistantMessage: Message = {
                         role: 'assistant',
                         content: response.content || '',
@@ -418,44 +470,35 @@ export class AgentLoop {
                     };
                     this.messages.push(assistantMessage);
 
-                    // Phase 2: Parallel Tool Execution (if tools requested)
+                    // Execute tools if any
                     if (toolCalls.length > 0) {
                         onUpdate('phase_change', {
                             phase: 'execution',
-                            message: `🔧 Executing ${toolCalls.length} Tool${toolCalls.length > 1 ? 's' : ''}`,
+                            message: `🔧 Executing ${toolCalls.length} tool${toolCalls.length > 1 ? 's' : ''}`,
                         });
 
-                        const { results, toolMessages } = await this.executeToolsParallel(toolCalls, onUpdate);
+                        const { results, toolMessages } = await this.executeToolsParallel(
+                            toolCalls, onUpdate, askPermission, { signal }
+                        );
 
-                        // Add tool results to message history
                         this.messages.push(...toolMessages);
 
-                        // Check for failures and trigger recovery if needed
+                        // Handle failures
                         const failures = results.filter((r) => !r.success);
                         if (failures.length > 0) {
-                            if (failures.length === results.length) {
-                                // All tools failed - trigger recovery mode
-                                onUpdate('phase_change', {
-                                    phase: 'recovery',
-                                    message: `🚨 Recovery Mode: ${failures.length} Tool Failure${failures.length > 1 ? 's' : ''}`,
-                                });
-                            }
-                            // Add recovery instructions to messages
                             this.messages.push({
                                 role: 'system',
-                                content: `Some tools failed: ${failures.map(f => f.error).join(', ')}. Try alternative approaches.`,
+                                content: `Some tools failed: ${failures.map(f => f.error).join(', ')}. Try alternatives.`,
                             });
                         }
 
-                        // Continue loop to analyze results - NEVER stop mid-task
                         continue;
                     }
 
-                    // No tool calls - check if we're done
+                    // Check if done
                     if (!this.shouldContinue()) {
                         const finalResponse = response.content || '';
                         this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
-                        // Task completed
 
                         onUpdate('completed', {
                             response: finalResponse,
@@ -471,25 +514,27 @@ export class AgentLoop {
                     }
 
                 } catch (iterationError: any) {
-                    // Handle iteration-specific errors WITHOUT breaking the loop
                     consecutiveErrors++;
                     lastError = iterationError;
 
+                    // Check if aborted
+                    if (signal.aborted || iterationError.message?.includes('abort') || iterationError.name === 'AbortError') {
+                        throw new Error('Aborted by user');
+                    }
+
                     onUpdate('phase_change', {
                         phase: 'recovery',
-                        message: `🔄 Recovering from error (attempt ${consecutiveErrors})...`,
+                        message: `🔄 Error recovery (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})...`,
                     });
 
-                    // Add error context to help the model recover
                     this.messages.push({
                         role: 'system',
-                        content: `An error occurred: ${iterationError.message}. Please continue with the task using an alternative approach.`,
+                        content: `Error occurred: ${iterationError.message}. Continue with task using alternative approach.`,
                     });
 
-                    // Only stop if we've had too many consecutive errors
                     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                        const errorResponse = `⚠️ Task encountered persistent errors after ${MAX_CONSECUTIVE_ERRORS} attempts. Last error: ${lastError?.message}. Please try rephrasing your request.`;
-                        // Task completed
+                        const errorResponse = `⚠️ Task failed after ${MAX_CONSECUTIVE_ERRORS} attempts. Last error: ${lastError?.message}`;
+                        this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
 
                         onUpdate('completed', {
                             response: errorResponse,
@@ -504,21 +549,17 @@ export class AgentLoop {
                         };
                     }
 
-                    // Brief pause before retry
                     await new Promise(r => setTimeout(r, 500));
-                    continue;
                 }
-
-                // Continue for next iteration
             }
 
-            // Max iterations reached - but still deliver what we have
+            // Max iterations
             const lastMessage = this.messages[this.messages.length - 1];
             const response = lastMessage?.role === 'assistant'
-                ? lastMessage.content || 'Task completed after extensive processing.'
-                : 'Task processed through maximum iterations. Results are available in the execution log.';
+                ? lastMessage.content || 'Task completed.'
+                : 'Task processed.';
 
-            // Task completed
+            this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
             onUpdate('completed', { response, telemetry: { ...this.telemetry }, executionLog: [...this.executionLog] });
 
             return {
@@ -528,11 +569,11 @@ export class AgentLoop {
             };
 
         } catch (error: any) {
-            // Absolute last resort - this should almost never happen
             this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
-            // Task completed
 
-            const errorResponse = `💥 Critical Engine Issue: ${error.message}. However, any completed work has been preserved. Try asking to continue from where we left off.`;
+            const errorResponse = error.message?.includes('abort')
+                ? '⏹️ Task aborted.'
+                : `💥 Error: ${error.message}`;
 
             onUpdate('completed', {
                 response: errorResponse,
@@ -545,6 +586,9 @@ export class AgentLoop {
                 telemetry: { ...this.telemetry },
                 executionLog: [...this.executionLog],
             };
+        } finally {
+            this.abortController = null;
+            this.isAborted = false;
         }
     }
 
@@ -552,11 +596,12 @@ export class AgentLoop {
      * Abort current operation
      */
     abort(): void {
+        this.isAborted = true;
         this.abortController?.abort();
     }
 
     /**
-     * Reset the agent state
+     * Reset agent state
      */
     reset(systemPrompt: string): void {
         this.messages = [{ role: 'system', content: systemPrompt }];
@@ -571,34 +616,7 @@ export class AgentLoop {
             failedTools: 0,
         };
         this.abortController = null;
+        this.isAborted = false;
         this.consecutiveNoToolIterations = 0;
     }
 }
-
-// Predator Evolution Step 15
-
-// Predator Evolution Step 17
-
-// Predator Evolution Step 21
-
-// Predator Evolution Step 29
-
-// Predator Evolution Step 31
-
-// Predator Evolution Step 36
-
-// Predator Evolution Step 39
-
-// Predator Evolution Step 40
-
-// Predator Evolution Step 41
-
-// Predator Evolution Step 44
-
-// Predator Evolution Step 62
-
-// Predator Evolution Step 66
-
-// Predator Evolution Step 69
-
-// Predator Evolution Step 70
