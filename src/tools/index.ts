@@ -3,6 +3,8 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { glob } from 'glob';
 import { performance } from 'perf_hooks';
+import { resolveWorkspacePath } from '../utils/paths.js';
+import { config } from '../utils/config.js';
 
 // execAsync removed - using spawn-based execution instead
 
@@ -15,7 +17,7 @@ export interface ToolResult {
 }
 
 interface ToolHandler {
-    (args: any): Promise<string>;
+    (args: any, context?: { signal?: AbortSignal }): Promise<string>;
 }
 
 /**
@@ -24,12 +26,16 @@ interface ToolHandler {
 async function executeCommand(
     command: string,
     cwd: string = '.',
-    timeout: number = 60000
+    timeoutArg?: number,
+    signal?: AbortSignal
 ): Promise<{ stdout: string; stderr: string }> {
+    const timeout = timeoutArg || config.toolTimeout || 120000;
+    const isWin = process.platform === 'win32';
+
     return new Promise((resolve, reject) => {
         const child = spawn(command, {
-            shell: true,
-            cwd,
+            shell: isWin ? 'powershell.exe' : true,
+            cwd: resolveWorkspacePath(cwd),
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 
@@ -37,18 +43,38 @@ async function executeCommand(
         let stderr = '';
         let timeoutId: NodeJS.Timeout;
 
+        const MAX_OUTPUT = 10000;
+
         child.stdout.on('data', (data) => {
-            stdout += data.toString();
+            if (stdout.length < MAX_OUTPUT) {
+                stdout += data.toString();
+                if (stdout.length >= MAX_OUTPUT) {
+                    stdout = stdout.slice(0, MAX_OUTPUT) + '\n...[STDOUT TRUNCATED - OVER LIMIT]';
+                }
+            }
         });
 
         child.stderr.on('data', (data) => {
-            stderr += data.toString();
+            if (stderr.length < MAX_OUTPUT) {
+                stderr += data.toString();
+                if (stderr.length >= MAX_OUTPUT) {
+                    stderr = stderr.slice(0, MAX_OUTPUT) + '\n...[STDERR TRUNCATED - OVER LIMIT]';
+                }
+            }
         });
 
         timeoutId = setTimeout(() => {
             child.kill('SIGTERM');
             reject(new Error(`Command timed out after ${timeout}ms`));
         }, timeout);
+
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                clearTimeout(timeoutId);
+                child.kill('SIGTERM');
+                reject(new Error('Process killed by user via AbortSignal'));
+            });
+        }
 
         child.on('close', (code) => {
             clearTimeout(timeoutId);
@@ -87,7 +113,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
-            const content = await fs.readFile(filePath, 'utf-8');
+            const safePath = resolveWorkspacePath(filePath);
+            const content = await fs.readFile(safePath, 'utf-8');
             const lines = content.split('\n');
 
             // Apply offset and limit
@@ -116,9 +143,10 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
-            const dir = path.dirname(filePath);
+            const safePath = resolveWorkspacePath(filePath);
+            const dir = path.dirname(safePath);
             await fs.mkdir(dir, { recursive: true });
-            await fs.writeFile(filePath, content, 'utf-8');
+            await fs.writeFile(safePath, content, 'utf-8');
             const elapsed = Math.round(performance.now() - startTime);
             return `✅ Successfully wrote ${content.length} chars to ${filePath} (${elapsed}ms)`;
         } catch (error: any) {
@@ -140,7 +168,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
-            const content = await fs.readFile(filePath, 'utf-8');
+            const safePath = resolveWorkspacePath(filePath);
+            const content = await fs.readFile(safePath, 'utf-8');
 
             if (!content.includes(old_string)) {
                 return `❌ Error: Could not find the text to replace in ${filePath}`;
@@ -151,11 +180,14 @@ export const toolHandlers: Record<string, ToolHandler> = {
                 return `⚠️ Warning: Found ${occurrences} occurrences. Replacing first one only.`;
             }
 
-            const newContent = content.replace(old_string, new_string);
-            await fs.writeFile(filePath, newContent, 'utf-8');
+            const newContent = content.replaceAll(old_string, new_string);
+            
+            // Write a simple backup first
+            await fs.writeFile(`${safePath}.bak`, content, 'utf-8');
+            await fs.writeFile(safePath, newContent, 'utf-8');
 
             const elapsed = Math.round(performance.now() - startTime);
-            return `✅ Successfully edited ${filePath} - replaced ${old_string.length} chars with ${new_string.length} chars (${elapsed}ms)`;
+            return `✅ Successfully edited ${safePath} (backup created at .bak) - replaced ${old_string.length} chars with ${new_string.length} chars (${elapsed}ms)`;
         } catch (error: any) {
             return `❌ Error editing file: ${error.message}`;
         }
@@ -167,7 +199,9 @@ export const toolHandlers: Record<string, ToolHandler> = {
     delete_file: async ({ path: filePath }: { path: string }) => {
         const startTime = performance.now();
         try {
-            await fs.unlink(filePath);
+            const safePath = resolveWorkspacePath(filePath);
+            // Create backup dir for deleted files? For now, we'll just delete safely
+            await fs.unlink(safePath);
             const elapsed = Math.round(performance.now() - startTime);
             return `✅ Successfully deleted ${filePath} (${elapsed}ms)`;
         } catch (error: any) {
@@ -189,11 +223,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
+            const safeDirPath = resolveWorkspacePath(dirPath);
             const searchPath = recursive
-                ? path.join(dirPath, '**', pattern)
-                : path.join(dirPath, pattern);
+                ? path.join(safeDirPath, '**', pattern)
+                : path.join(safeDirPath, pattern);
 
-            const files = await glob(searchPath, { nodir: !recursive });
+            // nodir: false to ensure we actually see directories when listing
+            const files = await glob(searchPath, { nodir: false });
             const elapsed = Math.round(performance.now() - startTime);
 
             const formatted = files
@@ -217,7 +253,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
     create_directory: async ({ path: dirPath }: { path: string }) => {
         const startTime = performance.now();
         try {
-            await fs.mkdir(dirPath, { recursive: true });
+            const safePath = resolveWorkspacePath(dirPath);
+            await fs.mkdir(safePath, { recursive: true });
             const elapsed = Math.round(performance.now() - startTime);
             return `✅ Successfully created directory ${dirPath} (${elapsed}ms)`;
         } catch (error: any) {
@@ -231,15 +268,15 @@ export const toolHandlers: Record<string, ToolHandler> = {
     run_command: async ({
         command,
         cwd = '.',
-        timeout = 60000,
+        timeout,
     }: {
         command: string;
         cwd?: string;
         timeout?: number;
-    }) => {
+    }, context?: { signal?: AbortSignal }) => {
         const startTime = performance.now();
         try {
-            const { stdout, stderr } = await executeCommand(command, cwd, timeout);
+            const { stdout, stderr } = await executeCommand(command, cwd, timeout, context?.signal);
             const elapsed = Math.round(performance.now() - startTime);
 
             let result = '';
@@ -263,7 +300,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
     grep: async ({
         pattern,
         searchPath = '.',
-        glob: fileGlob = '*',
+        glob: searchGlob = '*', // renamed to avoid shadowing glob import
     }: {
         pattern: string;
         searchPath?: string;
@@ -271,8 +308,16 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
-            const files = await glob(path.join(searchPath, '**', fileGlob));
+            const files = await glob(path.join(resolveWorkspacePath(searchPath), '**', searchGlob));
             const results: string[] = [];
+
+            // Pre-compile regex safely
+            let regex: RegExp | null = null;
+            try {
+                regex = new RegExp(pattern, 'g');
+            } catch (e) {
+                // Keep regex null if invalid (will fallback to includes)
+            }
 
             for (const file of files.slice(0, 100)) {
                 try {
@@ -280,7 +325,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
                     const lines = content.split('\n');
                     for (let idx = 0; idx < lines.length; idx++) {
                         const line = lines[idx];
-                        if (line.includes(pattern) || RegExp(pattern).test(line)) {
+                        if (line.includes(pattern) || (regex && regex.test(line))) {
                             results.push(`${file}:${idx + 1}: ${line.trim()}`);
                         }
                     }
@@ -330,10 +375,18 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }) => {
         const startTime = performance.now();
         try {
+            const parsedUrl = new URL(url);
+            const host = parsedUrl.hostname.toLowerCase();
+            
+            // Basic SSRF protection
+            if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('192.168.') || host.startsWith('10.')) {
+                throw new Error('SECURITY VIOLATION: Access to local network addresses is forbidden.');
+            }
+
             const response = await fetch(url, {
                 method,
                 headers: {
-                    'User-Agent': 'Murphy-Agent/3.0',
+                    'User-Agent': 'Murphy-Agent/3.1',
                     ...headers,
                 },
             });
@@ -348,26 +401,14 @@ export const toolHandlers: Record<string, ToolHandler> = {
     },
 };
 
-// Predator Evolution Step 14
 
-// Predator Evolution Step 20
 
-// Predator Evolution Step 25
 
-// Predator Evolution Step 26
 
-// Predator Evolution Step 33
 
-// Predator Evolution Step 43
 
-// Predator Evolution Step 49
 
-// Predator Evolution Step 50
 
-// Predator Evolution Step 54
 
-// Predator Evolution Step 55
 
-// Predator Evolution Step 56
 
-// Predator Evolution Step 67

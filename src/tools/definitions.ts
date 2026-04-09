@@ -197,7 +197,7 @@ export const fetchUrlTool: ToolDefinition = {
 /**
  * All available tools
  */
-export const tools = [
+export const tools: ToolDefinition[] = [
     readFileTool,
     writeFileTool,
     editFileTool,
