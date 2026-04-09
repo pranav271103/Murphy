@@ -117,7 +117,7 @@ const CommandDetailTree = memo<{ event: ToolExecutionEvent; isExpanded: boolean 
  * TreeNode - Displays a single tool execution in the hierarchy
  */
 const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean; isExpanded: boolean; onToggle: () => void }>(
-    ({ event, isLast, isExpanded, onToggle }) => {
+    ({ event, isLast, isExpanded }) => {
         const connector = isLast ? '└──' : '├──';
         return (
             <Box flexDirection="column">
