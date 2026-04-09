@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { config } from '../utils/config.js';
+import { config, MODEL_CONFIG } from '../utils/config.js';
 import { performance } from 'perf_hooks';
 
 export type ModelType = 'reasoning' | 'execution';
@@ -43,21 +43,7 @@ export class NVIDIAProvider {
     private qwenClient: OpenAI;
     private requestCache: Map<string, Promise<any>> = new Map();
 
-    // Model configuration
-    private readonly MODELS = {
-        reasoning: {
-            id: 'moonshotai/kimi-k2-thinking',
-            client: 'kimi' as const,
-            maxTokens: 8192,
-            temperature: 0.3,
-        },
-        execution: {
-            id: 'qwen/qwen3-coder-480b-a35b-instruct',
-            client: 'qwen' as const,
-            maxTokens: 16384,
-            temperature: 0.1,
-        },
-    };
+
 
     constructor() {
         // Initialize clients with optimized settings for NIM
@@ -83,7 +69,7 @@ export class NVIDIAProvider {
      * Get the appropriate client for the model type
      */
     private getClient(modelType: ModelType): OpenAI {
-        return this.MODELS[modelType].client === 'kimi' ? this.kimiClient : this.qwenClient;
+        return MODEL_CONFIG[modelType].client === 'kimi' ? this.kimiClient : this.qwenClient;
     }
 
     /**
@@ -92,11 +78,12 @@ export class NVIDIAProvider {
     private generateCacheKey(params: CompletionParams): string {
         const key = JSON.stringify({
             messages: params.messages,
-            modelType: params.modelType,
-            tools: params.tools?.map(t => t.function?.name || t.name),
-            temp: params.temperature,
+            model: params.modelType,
+            temperature: params.temperature,
+            tools: params.tools ? JSON.stringify(params.tools) : null,
         });
-        return `${Date.now()}_${this.hashString(key)}`;
+
+        return `${this.hashString(key)}`;
     }
 
     private hashString(str: string): string {
@@ -183,7 +170,8 @@ export class NVIDIAProvider {
      */
     async getCompletion(params: CompletionParams): Promise<CompletionResult> {
         const { messages, modelType, tools, temperature, onStream, signal } = params;
-        const modelConfig = this.MODELS[modelType];
+        const modelConfig = MODEL_CONFIG[modelType];
+        if (!modelConfig) throw new Error(`Unknown model type: ${modelType}`);
         const client = this.getClient(modelType);
 
         // Check for abort before starting
@@ -198,9 +186,35 @@ export class NVIDIAProvider {
             if (cached) {
                 return cached;
             }
+
+            const newRequest = this.executeRequest({
+                client,
+                model: modelConfig.id,
+                messages,
+                tools,
+                temperature: temperature ?? modelConfig.temperature,
+                maxTokens: modelConfig.maxTokens,
+                onStream,
+                signal,
+            });
+
+            this.requestCache.set(cacheKey, newRequest);
+            
+            // LRU-like simple cache eviction to prevent OOM
+            if (this.requestCache.size > 50) {
+                const firstKey = this.requestCache.keys().next().value;
+                if (firstKey) this.requestCache.delete(firstKey);
+            }
+
+            try {
+                return await newRequest;
+            } catch (error) {
+                this.requestCache.delete(cacheKey);
+                throw error;
+            }
         }
 
-        const requestPromise = this.executeRequest({
+        return this.executeRequest({
             client,
             model: modelConfig.id,
             messages,
@@ -208,10 +222,7 @@ export class NVIDIAProvider {
             temperature: temperature ?? modelConfig.temperature,
             maxTokens: modelConfig.maxTokens,
             onStream,
-            signal,
         });
-
-        return requestPromise;
     }
 
     /**
@@ -340,36 +351,23 @@ export class NVIDIAProvider {
         };
 
         const [kimi, qwen] = await Promise.all([
-            checkModel(this.kimiClient, this.MODELS.reasoning.id),
-            checkModel(this.qwenClient, this.MODELS.execution.id),
+            checkModel(this.kimiClient, MODEL_CONFIG.reasoning.id),
+            checkModel(this.qwenClient, MODEL_CONFIG.execution.id),
         ]);
 
         return { kimi, qwen };
     }
 }
 
-// Predator Evolution Step 13
 
-// Predator Evolution Step 16
 
-// Predator Evolution Step 23
 
-// Predator Evolution Step 27
 
-// Predator Evolution Step 30
 
-// Predator Evolution Step 34
 
-// Predator Evolution Step 46
 
-// Predator Evolution Step 51
 
-// Predator Evolution Step 53
 
-// Predator Evolution Step 57
 
-// Predator Evolution Step 64
 
-// Predator Evolution Step 68
 
-// Predator Evolution Step 71
