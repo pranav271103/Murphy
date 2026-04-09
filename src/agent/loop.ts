@@ -1,4 +1,5 @@
 import { NVIDIAProvider, ModelType } from '../providers/nvidia.js';
+import { SYSTEM_PROMPT, MODEL_CONFIG } from '../agent/constants.js';
 import { tools } from '../tools/definitions.js';
 import { toolHandlers, ToolResult } from '../tools/index.js';
 import { performance } from 'perf_hooks';
@@ -368,7 +369,8 @@ export class AgentLoop {
                         messages: this.messages,
                         modelType: phase,
                         tools: phase === 'execution' ? tools : undefined,
-                        temperature: phase === 'reasoning' ? 0.3 : 0.1,
+                        temperature: phase === 'reasoning' ? MODEL_CONFIG.kimi.temperature : MODEL_CONFIG.qwen.temperature,
+                        maxTokens: phase === 'reasoning' ? MODEL_CONFIG.kimi.maxTokens : MODEL_CONFIG.qwen.maxTokens,
                         onStream: (chunk) => {
                             onUpdate('model_stream', { chunk, phase });
                         },
