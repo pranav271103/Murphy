@@ -6,7 +6,7 @@ import React, {
     memo,
     useMemo,
 } from 'react';
-import { Box, Text, useInput, useApp, Static } from 'ink';
+import { Box, Text, useInput, useApp } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
 import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry } from '../agent/loop.js';
@@ -79,25 +79,6 @@ const PredatorTimer = memo<{ active: boolean }>(({ active }) => {
 });
 
 /**
- * BrandingOneTime - Use Static to render the heavy ASCII logo exactly once
- * Eliminates flicker during typing and streaming.
- */
-const BrandingOneTime = memo(() => (
-    <Static items={[{ id: 'branding' }]}>
-        {(item) => (
-            <Box key={item.id} flexDirection="column" alignItems="center" marginBottom={1} width="100%">
-                <Gradient name="retro">
-                    <BigText text="MURPHY" font="block" />
-                </Gradient>
-                <Box marginTop={-1}>
-                    <Text italic color="cyan" dimColor>═══ THE HIGH-SPEED CODING PREDATOR ═══</Text>
-                </Box>
-            </Box>
-        )}
-    </Static>
-));
-
-/**
  * CommandDetailTree - Collapsible tree showing full command details
  */
 const CommandDetailTree = memo<{ event: ToolExecutionEvent; isExpanded: boolean }>(({ event, isExpanded }) => {
@@ -116,7 +97,7 @@ const CommandDetailTree = memo<{ event: ToolExecutionEvent; isExpanded: boolean 
 /**
  * TreeNode - Displays a single tool execution in the hierarchy
  */
-const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean; isExpanded: boolean; onToggle: () => void }>(
+const TreeNode = memo<{ event: ToolExecutionEvent; isLast: boolean; isExpanded: boolean }>(
     ({ event, isLast, isExpanded }) => {
         const connector = isLast ? '└──' : '├──';
         return (
@@ -142,7 +123,7 @@ const ToolExecutionTree = memo<{ events: ToolExecutionEvent[] }>(({ events }) =>
         <Box flexDirection="column" marginLeft={4} marginTop={1}>
             <Text dimColor italic>├─ Execution Trace</Text>
             {events.map((event, idx) => (
-                <TreeNode key={event.id} event={event} isLast={idx === events.length - 1} isExpanded={false} onToggle={() => { }} />
+                <TreeNode key={event.id} event={event} isLast={idx === events.length - 1} isExpanded={false} />
             ))}
         </Box>
     );
@@ -280,10 +261,6 @@ const TelemetryBar = memo<{
     );
 });
 
-// ============================================================================
-// MAIN APP COMPONENT
-// ============================================================================
-
 const App: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -295,6 +272,7 @@ const App: React.FC = () => {
     const [sessionStats, setSessionStats] = useState<SessionStats>({
         messagesSent: 0, tokensProcessed: 0, totalToolExecutions: 0, avgModelLatency: 0,
     });
+    const [isProcessingInput, setIsProcessingInput] = useState(false);
 
     const { exit } = useApp();
     const agentRef = useRef<AgentLoop | null>(null);
@@ -361,15 +339,23 @@ const App: React.FC = () => {
 
     const handleSend = useCallback(async () => {
         const userInput = inputRef.current.trim();
-        if (!userInput || !agentRef.current) return;
+        if (!userInput || !agentRef.current || isProcessingInput) return;
+        
+        setIsProcessingInput(true);
         setInput('');
         setMessages((prev) => [...prev, { role: 'user', content: userInput, timestamp: Date.now() }]);
         setStatus('thinking');
         setStreamingContent('');
         setActiveTools([]);
         setSessionStats((prev) => ({ ...prev, messagesSent: prev.messagesSent + 1 }));
-        await agentRef.current.process(userInput, handleAgentUpdate);
-    }, [handleAgentUpdate]);
+        
+        try {
+            await agentRef.current.process(userInput, handleAgentUpdate);
+        } finally {
+            setIsProcessingInput(false);
+            setStatus('ready');
+        }
+    }, [handleAgentUpdate, isProcessingInput]);
 
     const [isPasteMode, setIsPasteMode] = useState(false);
     const pasteBufferRef = useRef('');
@@ -378,17 +364,28 @@ const App: React.FC = () => {
         if (inputStr === '\x1b[200~') { setIsPasteMode(true); pasteBufferRef.current = ''; return; }
         if (inputStr === '\x1b[201~') { setIsPasteMode(false); const normalized = pasteBufferRef.current.replace(/\r\n/g, '\n').replace(/\n/g, ' '); setInput((prev) => prev + normalized); return; }
         if (isPasteMode) { pasteBufferRef.current += inputStr; return; }
-        if (key.return) { if (inputRef.current.trim().toLowerCase() === 'exit') exit(); else if (inputRef.current.trim()) handleSend(); return; }
+        if (key.return) { 
+            if (inputRef.current.trim().toLowerCase() === 'exit') exit(); 
+            else if (inputRef.current.trim() && !isProcessingInput) handleSend(); 
+            return; 
+        }
         if (key.backspace || key.delete) { setInput((p) => p.slice(0, -1)); return; }
         if (key.ctrl && inputStr === 'c') exit();
         if (key.ctrl && inputStr === 'l') setMessages([]);
         if (!key.ctrl && !key.meta && inputStr.length >= 1) setInput((p) => p + inputStr);
-    }, [handleSend, exit, isPasteMode]));
+    }, [handleSend, exit, isPasteMode, isProcessingInput]));
 
     return (
-        <Box flexDirection="column" width="100%">
-            <BrandingOneTime />
-            <Box flexDirection="column" borderStyle="singleDouble" borderColor="cyan" paddingX={2} paddingY={1} minHeight={15}>
+        <Box flexDirection="column" width="100%" minHeight={20}>
+            <Box flexDirection="column" alignItems="center" marginBottom={1} width="100%">
+                <Gradient name="retro">
+                    <BigText text="MURPHY" font="block" />
+                </Gradient>
+                <Box marginTop={-1}>
+                    <Text italic color="cyan" dimColor>═══ THE HIGH-SPEED CODING PREDATOR ═══</Text>
+                </Box>
+            </Box>
+            <Box flexDirection="column" borderStyle="singleDouble" borderColor="cyan" paddingX={2} paddingY={1} minHeight={12}>
                 <MessageHistory messages={messages} maxVisible={3} />
                 {messages.length === 0 && (
                     <Box padding={2} justifyContent="center" flexDirection="column" alignItems="center">
