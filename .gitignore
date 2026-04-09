@@ -2,7 +2,7 @@
 node_modules/
 dist/
 npm-debug.log*
-package-lock.json
+
 
 # Env
 .env
@@ -15,5 +15,3 @@ commit_marathon.py
 
 # Brain/Artifacts
 brain/
-*.md
-!README.md
