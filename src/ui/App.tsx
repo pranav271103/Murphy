@@ -352,31 +352,28 @@ const App: React.FC = () => {
     }, [handleSend, exit, isPasteMode, isProcessingInput]));
 
     return (
-        <Box flexDirection="column" width="100%">
+        <Box flexDirection="column" width="100%" height={20} overflow="hidden">
             <Static items={BRANDING_STABLE}>
                 {(item) => (
-                    <Box key={item.id} flexDirection="column" alignItems="center" marginBottom={1}>
-                        <Gradient name="retro">
-                            <BigText text="MURPHY" font="block" />
-                        </Gradient>
-                        <Text italic color="cyan" dimColor>═══ THE HIGH-SPEED CODING PREDATOR ═══</Text>
+                    <Box key={item.id} flexDirection="column" width="100%" marginBottom={1}>
+                        <Box borderStyle="double" borderColor="cyan" paddingX={2} justifyContent="center">
+                            <Text bold color="cyan"> ⚡ MURPHY v3.1.5 PREDATOR ⚡ </Text>
+                        </Box>
                     </Box>
                 )}
             </Static>
 
-            <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} height={10}>
-                <MessageHistory messages={messages} maxVisible={3} />
-                {messages.length === 0 && (
-                    <Box padding={1} justifyContent="center" flexDirection="column" alignItems="center">
-                        <Text color="gray">Deploy instructions...</Text>
-                    </Box>
-                )}
-                <Box flexGrow={1} />
+            <Box flexDirection="column" flexGrow={1} paddingX={2}>
+                <MessageHistory messages={messages} maxVisible={4} />
+                {messages.length === 0 && <Text dimColor italic>Standing by for mission parameters...</Text>}
+            </Box>
+
+            <Box flexDirection="column" paddingX={2} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray">
                 <StreamingArea content={streamingContent} active={status !== 'ready'} />
                 <ActiveToolPanel tools={activeTools} phase={currentPhase} />
+                <TelemetryBar telemetry={telemetry} isProcessing={status !== 'ready'} sessionStats={sessionStats} />
+                <PredatorInputArea input={input} status={status} />
             </Box>
-            <TelemetryBar telemetry={telemetry} isProcessing={status !== 'ready'} sessionStats={sessionStats} />
-            <PredatorInputArea input={input} status={status} />
         </Box>
     );
 };
