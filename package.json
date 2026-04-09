@@ -1,6 +1,6 @@
 {
   "name": "@pranav271103/murphycode",
-  "version": "3.1.7",
+  "version": "3.2.0",
   "description": "Murphy - The High-Speed Coding Predator. An agentic coding platform powered by dual-model orchestration.",
   "type": "module",
   "bin": {
@@ -26,7 +26,7 @@
     "prepublishOnly": "npm run build",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"No tests yet - predator hunts without tests\" && exit 0",
+    "test": "vitest run",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
@@ -48,19 +48,19 @@
     "dotenv": "^16.4.5",
     "glob": "^10.3.10",
     "ink": "^5.0.1",
-    "ink-big-text": "^2.0.0",
-    "ink-gradient": "^4.0.0",
-    "ink-spinner": "^5.0.0",
     "openai": "^4.47.1",
-    "react": "^18.3.1",
-    "zod": "^3.23.8"
+    "react": "^18.3.1"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.3",
+    "@vitest/ui": "^4.1.4",
+    "eslint": "^10.2.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.4"
   },
   "engines": {
     "node": ">=18.0.0"
