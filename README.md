@@ -4,7 +4,7 @@
 
 Built with dual-model orchestration, parallel execution, and an unbreakable execution loop, Murphy delivers surgical precision at predator speed.
 
-![Version](https://img.shields.io/badge/version-3.0.2-ff0066)
+![Version](https://img.shields.io/badge/version-3.2.0-ff0066)
 ![GitHub Packages](https://img.shields.io/badge/GitHub--Packages-active-brightgreen?logo=github)
 ![License](https://img.shields.io/badge/license-MIT-00ff99)
 ![Platform](https://img.shields.io/badge/platform-Node.js%2018+-00ccff)
@@ -25,6 +25,9 @@ Built with dual-model orchestration, parallel execution, and an unbreakable exec
 | **Autonomous Execution** | Asks permission | Asks permission | **Zero Questions** |
 | **Tool Retry Logic** | None | None | **Exponential Backoff** |
 | **Connection Pooling** | No | No | **Request Deduplication** |
+| **Session Persistence** | Memory Only | Memory Only | **Atomic JSON Persistent** |
+| **TUI Interaction** | Basic | Basic | **History + Auto-scroll** |
+| **Abort Handling** | Partial | None | **Full AbortSignal Stack** |
 
 ## Architecture
 
@@ -140,13 +143,18 @@ node dist/index.js
 murphy
 ```
 
-### Commands
+### Slash Commands & Keyboard
 
 Once inside Murphy:
-- Type your request and press **Enter**
-- **exit** or **quit** to close
-- **Ctrl+C** to abort current operation
-- **Ctrl+C** again to kill Murphy
+- **Slash Commands**:
+  - `/new` or `/reset`: Start a fresh mission (clear history)
+  - `/clear`: Clear terminal message screen
+  - `/help`: Show command intelligence panel
+- **Keyboard Mastery**:
+  - **↑ / ↓**: Navigate command history
+  - **Ctrl+C**: Exit (when ready) or Abort (when working)
+  - **ESC**: Native task interruption
+  - **Ctrl+L**: Instant screen wipe
 
 ## Key Features
 
@@ -195,12 +203,20 @@ Every command displays:
 - Real-time parallel tool visualization
 - Live telemetry bar
 
-### 6. Streaming Response
+### 6. Persistent Sessions
 
-Watch Murphy think in real-time:
-- Streaming model output
-- No waiting for blocks
-- Immediate visual feedback
+Murphy never forgets:
+- **Atomic Persistence**: Conversations are saved to `.murphy_session.json`
+- **Safety Backups**: Corrupted sessions are automatically backed up
+- **Version Tracking**: Session data is versioned for compatibility
+
+### 7. Interactive TUI Navigation
+
+Modern terminal experience:
+- **Command History**: Cycle through previous inputs with arrow keys
+- **Auto-Scroll**: Messages stay in view as Murphy executes
+- **Error Boundary**: React-native crash protection saves your state
+- **Streaming Area**: Real-time visualization of model patterns
 
 ## Available Tools
 
@@ -284,11 +300,11 @@ npm run dev
 
 ## Roadmap
 
+- [x] Multi-session persistence (v3.2)
+- [x] Git integration base (v3.2)
 - [ ] WebSocket support for remote execution
 - [ ] Plugin system for custom tools
-- [ ] Git integration (commit, diff, branch)
 - [ ] LSP integration for code intelligence
-- [ ] Multi-session persistence
 - [ ] Team collaboration features
 
 ## Contributing
