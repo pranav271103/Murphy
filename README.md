@@ -95,7 +95,6 @@ murphycode
 git clone https://github.com/pranav271103/Murphy.git
 cd murphy
 npm install
-```
 
 # Configure your environment
 cp .env.example .env
@@ -103,8 +102,10 @@ cp .env.example .env
 
 # Launch the predator
 npm start
+```
 
-# Or after installing globally
+**Or after installing globally:**
+```bash
 npm install -g murphycode
 murphycode
 ```
