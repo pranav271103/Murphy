@@ -14,8 +14,6 @@ import { saveSession, loadSession, clearSession } from '../utils/session.js';
 import { config } from '../utils/config.js';
 import { execSync } from 'child_process';
 
-
-
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -28,13 +26,37 @@ interface Message {
     expanded?: boolean;
 }
 
+// ============================================================================
+// BRANDING COMPONENTS
+// ============================================================================
+
+const MurphyInkLogo = memo(() => {
+    const columns = process.stdout.columns || 80;
+    const logoWidth = 52; // Approximate width of the ASCII art
+    const padding = Math.max(0, Math.floor((columns - logoWidth) / 2));
+
+    return (
+        <Box flexDirection="column" width="100%" marginY={1}>
+            <Box flexDirection="column" paddingLeft={padding}>
+                <Text color="cyan" bold>{String.raw`   __  __ _    _ _____  _____  _    ___     __`}</Text>
+                <Text color="cyan" bold>{String.raw`  |  \/  | |  | |  __ \|  __ \| |  | \ \   / /`}</Text>
+                <Text color="cyan" bold>{String.raw`  | \  / | |  | | |__) | |__) | |__| |\ \_/ / `}</Text>
+                <Text color="cyan" bold>{String.raw`  | |\/| | |  | |  _  /|  ___/|  __  | \   /  `}</Text>
+                <Text color="cyan" bold>{String.raw`  | |  | | |__| | | \ \| |    | |  | |  | |   `}</Text>
+                <Text color="cyan" bold>{String.raw`  |_|  |_|\____/|_|  \_\_|    |_|  |_|  |_|   `}</Text>
+                <Box paddingLeft={2}>
+                    <Text color="gray" dimColor>PREDATOR v3.4 EDITION | MISSION CONTROL CENTER</Text>
+                </Box>
+            </Box>
+            <Box width="100%" marginY={1}>
+                <Text color="gray">{'─'.repeat(columns)}</Text>
+            </Box>
+        </Box>
+    );
+});
 
 // ============================================================================
-// FIXED UI COMPONENTS
-// ============================================================================
-
-// ============================================================================
-// UI COMPONENTS (STABILIZED & OPTIMIZED)
+// UI COMPONENTS
 // ============================================================================
 
 const PredatorSpinner = memo(() => {
@@ -47,9 +69,6 @@ const PredatorSpinner = memo(() => {
     return <Text color="cyan">{frames[tick]}</Text>;
 });
 
-/**
- * Audit log for tool executions - Claude Style
- */
 const ToolAuditStep = memo<{ event: ToolExecutionEvent }>(({ event }) => {
     let statusIcon = '●';
     let statusColor = 'gray';
@@ -96,7 +115,6 @@ const MessageItem = memo<{ msg: Message }>(({ msg }) => {
     const isAssistant = msg.role === 'assistant';
     const roleLabel = isAssistant ? ' Assistant ' : ' User ';
     const roleBg = isAssistant ? 'blue' : 'green';
-
     const content = stripXml(msg.content);
 
     return (
@@ -113,15 +131,18 @@ const MessageItem = memo<{ msg: Message }>(({ msg }) => {
 
 const MessageHistory = memo<{ messages: Message[] }>(({ messages }) => {
     return (
-        <Static items={messages}>
+        <Static items={[{ role: 'system', content: '__LOGO__', timestamp: 0 } as Message, ...messages]}>
             {(msg, idx) => (
-                <MessageItem key={`${msg.timestamp}_${idx}`} msg={msg} />
+                <Box key={idx} flexDirection="column" width="100%">
+                    {msg.content === '__LOGO__' ? <MurphyInkLogo /> : <MessageItem msg={msg} />}
+                </Box>
             )}
         </Static>
     );
 });
 
 const CommitHistoryDisplay = memo<{ commits: { hash: string; message: string; author: string; date: string }[] }>(({ commits }) => {
+    if (commits.length === 0) return null;
     return (
         <Box flexDirection="column" marginBottom={1} paddingX={1} borderStyle="round" borderColor="gray">
             <Text bold color="cyan">Recent Commits</Text>
@@ -157,27 +178,56 @@ const StreamingArea = memo<{ content: string; active: boolean }>(({ content, act
     );
 });
 
+const TerminalOutput = memo<{ 
+    messages: Message[];
+    commitHistory: { hash: string; message: string; author: string; date: string }[];
+    showCommits: boolean;
+}>(({ messages, commitHistory, showCommits }) => {
+    return (
+        <Box flexDirection="column" width="100%">
+            {showCommits && <CommitHistoryDisplay commits={commitHistory} />}
+            <MessageHistory messages={messages} />
+        </Box>
+    );
+});
+
+const ActiveWorkArea = memo<{
+    content: string;
+    active: boolean;
+    tools: ToolExecutionEvent[];
+    phase: string;
+}>(({ content, active, tools, phase }) => {
+    if (!active && !content && tools.length === 0 && !phase) return null;
+    return (
+        <Box flexDirection="column" paddingX={1} width="100%">
+            {content && <StreamingArea content={content} active={active} />}
+            {tools.length > 0 && <ActivityFeed tools={tools} phase={phase} />}
+        </Box>
+    );
+});
 
 const TelemetryBar = memo<{
     telemetry: LoopTelemetry | null;
     isProcessing: boolean;
 }>(({ telemetry, isProcessing }) => {
     return (
-        <Box height={1} paddingX={1} flexDirection="row" alignItems="center">
-            <Text color={isProcessing ? 'cyan' : 'gray'} bold>{isProcessing ? '●' : '○'}</Text>
-            <Text color="gray"> Status: </Text>
-            <Text color={isProcessing ? 'yellow' : 'green'}>{isProcessing ? 'Executing Mission' : 'Idle'}</Text>
-            {telemetry && (
-                <Box paddingLeft={2}>
-                    <Text color="gray">Tools: </Text>
-                    <Text color="white">{telemetry.completedTools}</Text>
-                    <Text color="gray"> / Iter: </Text>
-                    <Text color="white">{telemetry.iteration}</Text>
-                </Box>
-            )}
-            <Box flexGrow={1} />
+        <Box height={1} paddingX={1} width="100%" justifyContent="space-between">
+            <Box flexDirection="row">
+                <Text color={isProcessing ? 'cyan' : 'gray'} bold>{isProcessing ? '●' : '○'}</Text>
+                <Text color="gray"> STATUS: </Text>
+                <Text color={isProcessing ? 'yellow' : 'green'}>{isProcessing ? 'EXECUTING MISSION' : 'IDLE / READY'}</Text>
+                {telemetry && (
+                    <Box paddingLeft={2}>
+                        <Text color="gray">TOOLS: </Text>
+                        <Text color="white">{telemetry.completedTools}</Text>
+                        <Text color="gray"> | ITER: </Text>
+                        <Text color="white">{telemetry.iteration}</Text>
+                    </Box>
+                )}
+            </Box>
+
             <Box>
-                <Text color="gray">Ctrl+C to Exit</Text>
+                <Text color="gray" dimColor>MURPHY v3.4 <Text color="cyan">|</Text> ESC TO ABORT <Text color="cyan">|</Text> CTRL+C TO EXIT</Text>
             </Box>
         </Box>
     );
@@ -185,29 +235,32 @@ const TelemetryBar = memo<{
 
 const PredatorInputArea = memo<{ input: string; isProcessing: boolean }>(({ input, isProcessing }) => {
     return (
-        <Box marginTop={0} paddingX={1} flexDirection="column">
-            <Box flexDirection="row" borderStyle="round" borderColor={isProcessing ? 'gray' : 'cyan'} paddingX={1}>
-                <Box width={3}>
-                    <Text color="cyan" bold>❯</Text>
-                </Box>
-                <Box flexGrow={1}>
+        <Box flexDirection="column" marginTop={1} width="100%">
+            <Box 
+                borderStyle="round" 
+                borderColor={isProcessing ? "yellow" : "cyan"} 
+                paddingX={2}
+                width="100%"
+            >
+                <Box flexDirection="row" flexGrow={1}>
+                    <Text color="cyan" bold>❯ </Text>
                     {input ? (
                         <Text color="white">{input}</Text>
                     ) : (
-                        <Text color="gray" dimColor>Ask Murphy anything...</Text>
+                        <Text color="gray" dimColor italic>Ask Murphy anything...</Text>
                     )}
                 </Box>
             </Box>
             {isProcessing && (
-                <Box paddingLeft={1}>
-                    <Text color="gray" italic>Predator is processing mission parameters...</Text>
+                <Box width="100%" paddingLeft={4} marginTop={0}>
+                    <PredatorSpinner />
+                    <Text color="yellow" italic>  Executing mission protocols...</Text>
                 </Box>
             )}
         </Box>
     );
 });
 
-// Help panel
 const HelpPanel = memo<{ onClose: () => void }>(({ onClose }) => {
     useInput((input, key) => {
         if (key.return || key.escape || input === 'q') {
@@ -219,10 +272,10 @@ const HelpPanel = memo<{ onClose: () => void }>(({ onClose }) => {
         <Box flexDirection="column" padding={1} borderStyle="double" borderColor="cyan">
             <Text bold color="cyan">⚡ MURPHY COMMANDS ⚡</Text>
             <Box marginY={1} flexDirection="column">
-                <Text><Text bold color="green">/new</Text> - Start a fresh chat (clear history)</Text>
+                <Text><Text bold color="green">/new</Text> - Start a NEW CHAT (clears history)</Text>
                 <Text><Text bold color="green">/clear</Text> - Clear the screen</Text>
                 <Text><Text bold color="green">/reset</Text> - Reset agent and clear history</Text>
-                <Text><Text bold color="green">/commits</Text> - Refresh commit history display</Text>
+                <Text><Text bold color="green">/commits</Text> - TOGGLE commit history window</Text>
                 <Text><Text bold color="green">/help</Text> - Show this help</Text>
                 <Text><Text bold color="green">exit</Text> - Exit Murphy</Text>
             </Box>
@@ -249,21 +302,23 @@ const HelpPanel = memo<{ onClose: () => void }>(({ onClose }) => {
 const App: React.FC = () => {
     const initialSession = useMemo(() => loadSession(config.defaultCwd), []);
     const [messages, setMessages] = useState<Message[]>(initialSession?.uiMessages || []);
-    const [input, setInput] = useState('');
-    const [status, setStatus] = useState<'ready' | 'thinking' | 'executing'>('ready');
-    const [streamingContent, setStreamingContent] = useState('');
-    const streamingBufferRef = useRef('');
-    const lastRenderTimeRef = useRef(0);
     const [currentPhase, setCurrentPhase] = useState<string>('');
     const [telemetry, setTelemetry] = useState<LoopTelemetry | null>(null);
     const [fullHistory, setFullHistory] = useState<ToolExecutionEvent[]>([]);
     const [permissionRequest, setPermissionRequest] = useState<{ tool: string, args: any, resolve: (v: boolean) => void } | null>(null);
     const [isProcessingInput, setIsProcessingInput] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
+    const [showCommits, setShowCommits] = useState(false);
     const [commitHistory, setCommitHistory] = useState<{ hash: string; message: string; author: string; date: string }[]>([]);
 
+    const [input, setInput] = useState('');
+    const [isPasteMode, setIsPasteMode] = useState(false);
+    const pasteBufferRef = useRef('');
+    const [status, setStatus] = useState<'ready' | 'thinking' | 'executing'>('ready');
+    const [streamingContent, setStreamingContent] = useState('');
+    const streamingBufferRef = useRef('');
+    const lastRenderTimeRef = useRef(0);
 
-    // In the App component, add this effect to fetch commit history
     useEffect(() => {
         try {
             const output = execSync('git log --oneline -10 --pretty=format:"%h|%s|%an|%ad"', {
@@ -279,13 +334,10 @@ const App: React.FC = () => {
 
             setCommitHistory(commits);
         } catch (error) {
-            // Fallback to mock data if git command fails
-            setCommitHistory([
-                { hash: "a516d12", message: "Add commit history display feature with /commits command", author: "Developer", date: new Date().toISOString() },
-                { hash: "4f31909", message: "feat: Add comprehensive commit history tracking documentation", author: "Murphy Bot", date: "2026-04-09" }
-            ]);
+            setCommitHistory([]);
         }
     }, []);
+
     const [commandHistory, setCommandHistory] = useState<string[]>(() => {
         return (initialSession?.uiMessages || [])
             .filter((m: any) => m.role === 'user')
@@ -295,18 +347,10 @@ const App: React.FC = () => {
 
     const { exit } = useApp();
     const agentRef = useRef<AgentLoop | null>(null);
-    const inputRef = useRef(input);
-    const messagesEndRef = useRef<any>(null);
-    inputRef.current = input;
 
     useEffect(() => {
         agentRef.current = new AgentLoop(getSystemPrompt(config.defaultCwd), initialSession?.agentMessages);
     }, [initialSession]);
-
-    // Auto-scroll to bottom when new messages arrive
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-    }, [messages, streamingContent]);
 
     const handleAgentUpdate = useCallback((type: UpdateType, data: any) => {
         switch (type) {
@@ -375,44 +419,21 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleSend = useCallback(async () => {
-        const userInput = inputRef.current.trim();
+    const handleSend = useCallback(async (msg?: string) => {
+        const userInput = (msg || input).trim();
         if (!userInput || !agentRef.current || isProcessingInput) return;
 
-        // Handle commands
         const lowerInput = userInput.toLowerCase();
-        if (lowerInput === '/help') {
-            setShowHelp(true);
-            setInput('');
-            return;
-        }
-        if (lowerInput === '/commits') {
-            // Refresh commit history
-            setCommitHistory([
-                { hash: "a1b2c3d4", message: "feat: Add comprehensive commit history tracking documentation", author: "Murphy Bot", date: "2026-04-09" },
-                { hash: "e5f6g7h8", message: "Initial commit", author: "Murphy Bot", date: "2026-04-09" },
-                { hash: "4f31909", message: "Add core features", author: "Murphy Bot", date: "2026-04-09" }
-            ]);
-            setInput('');
-            return;
-        }
+        if (lowerInput === '/help') { setShowHelp(true); setInput(''); return; }
+        if (lowerInput === '/commits') { setShowCommits((prev) => !prev); setInput(''); return; }
         if (lowerInput === '/new' || lowerInput === '/reset') {
             setMessages([]);
             if (agentRef.current) agentRef.current.reset(getSystemPrompt(config.defaultCwd));
             clearSession(config.defaultCwd);
-            setInput('');
-            setStreamingContent('');
-            streamingBufferRef.current = '';
-            setFullHistory([]);
-            setStatus('ready');
-            setIsProcessingInput(false);
+            setInput(''); setStreamingContent(''); setFullHistory([]); setStatus('ready'); setIsProcessingInput(false); setShowCommits(false);
             return;
         }
-        if (lowerInput === '/clear') {
-            setMessages([]);
-            setInput('');
-            return;
-        }
+        if (lowerInput === '/clear' || lowerInput === 'clear') { setMessages([]); setInput(''); return; }
 
         setIsProcessingInput(true);
         setInput('');
@@ -448,7 +469,7 @@ const App: React.FC = () => {
             setIsProcessingInput(false);
             setStatus('ready');
         }
-    }, [handleAgentUpdate, isProcessingInput]);
+    }, [handleAgentUpdate, isProcessingInput, input]);
 
     const handleAbort = useCallback(() => {
         if (agentRef.current && isProcessingInput) {
@@ -456,52 +477,23 @@ const App: React.FC = () => {
         }
     }, [isProcessingInput]);
 
-    const [isPasteMode, setIsPasteMode] = useState(false);
-    const pasteBufferRef = useRef('');
-
     useInput(useCallback((inputStr, key) => {
-        // Help mode input handling
-        if (showHelp) {
-            if (key.return || key.escape || inputStr === 'q') {
-                setShowHelp(false);
-            }
-            return;
-        }
-
-        // Permission prompt handling
+        if (showHelp) { if (key.return || key.escape || inputStr === 'q') setShowHelp(false); return; }
         if (permissionRequest) {
             const char = inputStr.toLowerCase();
             if (char === 'y') permissionRequest.resolve(true);
             else if (char === 'n') permissionRequest.resolve(false);
             return;
         }
-
-        // Paste mode handling
-        if (inputStr === '\x1b[200~') {
-            setIsPasteMode(true);
-            pasteBufferRef.current = '';
-            return;
-        }
+        if (inputStr === '\x1b[200~') { setIsPasteMode(true); pasteBufferRef.current = ''; return; }
         if (inputStr === '\x1b[201~') {
             setIsPasteMode(false);
             const normalized = pasteBufferRef.current.replace(/\r\n/g, '\n').replace(/\n/g, ' ');
             setInput((prev) => prev + normalized);
             return;
         }
-        if (isPasteMode) {
-            pasteBufferRef.current += inputStr;
-            return;
-        }
-
-        // Escape key - abort current operation
-        if (key.escape) {
-            if (isProcessingInput) {
-                handleAbort();
-            }
-            return;
-        }
-
-        // History navigation
+        if (isPasteMode) { pasteBufferRef.current += inputStr; return; }
+        if (key.escape) { if (isProcessingInput) handleAbort(); return; }
         if (key.upArrow) {
             setHistoryIndex((prev) => {
                 const newIndex = prev < commandHistory.length - 1 ? prev + 1 : prev;
@@ -519,100 +511,63 @@ const App: React.FC = () => {
             });
             return;
         }
-
-        // Enter key - send message
         if (key.return) {
-            const val = inputRef.current.trim().toLowerCase();
-            if (val === 'exit') {
-                exit();
-            } else if (val === 'clear' || val === '/clear') {
-                setMessages([]);
-                setInput('');
-            } else if (val === '/new' || val === '/reset') {
+            const val = input.trim().toLowerCase();
+            if (val === 'exit') exit();
+            else if (val === 'clear' || val === '/clear') { setMessages([]); setInput(''); }
+            else if (val === '/new' || val === '/reset') {
                 setMessages([]);
                 if (agentRef.current) agentRef.current.reset(getSystemPrompt(config.defaultCwd));
                 clearSession(config.defaultCwd);
-                setInput('');
-                setStreamingContent('');
-                streamingBufferRef.current = '';
-                setFullHistory([]);
-                setStatus('ready');
-                setIsProcessingInput(false);
-            } else if (val === '/help') {
-                setShowHelp(true);
-                setInput('');
-            } else if (inputRef.current.trim() && !isProcessingInput) {
-                handleSend();
-            }
+                setInput(''); setStreamingContent(''); setFullHistory([]); setStatus('ready'); setIsProcessingInput(false);
+            } else if (val === '/help') { setShowHelp(true); setInput(''); }
+            else if (input.trim() && !isProcessingInput) handleSend(input);
             return;
         }
+        if (key.backspace || key.delete) { setInput((p) => p.slice(0, -1)); return; }
+        if (key.ctrl && inputStr === 'c') { if (isProcessingInput) handleAbort(); else exit(); return; }
+        if (key.ctrl && inputStr === 'l') { setMessages([]); return; }
+        if (!key.ctrl && !key.meta && inputStr.length >= 1) { setInput((p) => p + inputStr); }
+    }, [input, handleSend, exit, isPasteMode, isProcessingInput, commandHistory, permissionRequest, showHelp, handleAbort]));
 
-        // Backspace
-        if (key.backspace || key.delete) {
-            setInput((p) => p.slice(0, -1));
-            return;
-        }
-
-        // Ctrl+C - exit if ready, abort if processing
-        if (key.ctrl && inputStr === 'c') {
-            if (isProcessingInput) {
-                handleAbort();
-            } else {
-                exit();
-            }
-            return;
-        }
-
-        // Ctrl+L - clear screen
-        if (key.ctrl && inputStr === 'l') {
-            setMessages([]);
-            return;
-        }
-
-        // Regular character input
-        if (!key.ctrl && !key.meta && inputStr.length >= 1) {
-            setInput((p) => p + inputStr);
-        }
-    }, [handleSend, exit, isPasteMode, isProcessingInput, commandHistory, permissionRequest, showHelp, handleAbort]));
-
-    // Fixed layout - no fixed height blocking content
     return (
         <Box flexDirection="column" width="100%">
-            {/* Historical Content (Static) - Does not re-render on keypress */}
-            <CommitHistoryDisplay commits={commitHistory} />
-            <MessageHistory messages={messages} />
+            <TerminalOutput 
+                messages={messages} 
+                commitHistory={commitHistory} 
+                showCommits={showCommits} 
+            />
 
-            {/* Dynamic Content (Active Turn) */}
-            <Box flexDirection="column" paddingX={1} width="100%">
-                {streamingContent && <StreamingArea content={streamingContent} active={status !== 'ready'} />}
-                {fullHistory.length > 0 && <ActivityFeed tools={fullHistory} phase={currentPhase} />}
-            </Box>
+            <ActiveWorkArea
+                content={streamingContent}
+                active={status !== 'ready'}
+                tools={fullHistory}
+                phase={currentPhase}
+            />
 
-            {/* Help Panel */}
             {showHelp && (
                 <Box padding={1} width="100%">
                     <HelpPanel onClose={() => setShowHelp(false)} />
                 </Box>
             )}
 
-            {/* Permission Prompt */}
             {permissionRequest && (
                 <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={2} marginY={1}>
                     <Text color="yellow" bold>PERMISSION REQUIRED: {permissionRequest.tool}</Text>
                     <Text dimColor color="gray">{JSON.stringify(permissionRequest.args)}</Text>
-                    <Box marginTop={1}>
-                        <Text color="cyan" bold>Allow action? [Y]es / [N]o</Text>
-                    </Box>
+                    <Box marginTop={1}><Text color="cyan" bold>Allow action? [Y]es / [N]o</Text></Box>
                 </Box>
             )}
 
-            {/* Fixed Footer Area */}
             <Box flexDirection="column" marginTop={1}>
-                {/* Visual Separator */}
-                <Box height={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray" />
+                {/* Visual separator */}
+                <Box width="100%" height={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray" />
+                
                 <TelemetryBar telemetry={telemetry} isProcessing={status !== 'ready'} />
+                
                 <PredatorInputArea input={input} isProcessing={isProcessingInput} />
             </Box>
+            <Box height={1} />
         </Box>
     );
 };
@@ -623,9 +578,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
         super(props);
         this.state = { hasError: false, error: null };
     }
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error };
-    }
+    static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
     render() {
         if (this.state.hasError) {
             return (
