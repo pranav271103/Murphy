@@ -20,3 +20,7 @@ brain/
 .murphy_session.json
 test.js
 *.bak
+
+# Documentation
+site/
+.cache/
