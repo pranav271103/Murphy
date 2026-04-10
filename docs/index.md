@@ -1,52 +1,46 @@
-# ⚡ MURPHY: THE HIGH-SPEED CODING PREDATOR
+# Murphy Documentation
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/pranav271103/Murphy/main/public/MurphyLogo.png" width="200" alt="Murphy Logo">
-  <h3>Surgical Precision. Extreme Speed. Zero Hesitation.</h3>
-</div>
+Murphy is an agentic coding assistant designed for high-performance software engineering tasks. It utilizes a dual-model orchestration system to combine strategic planning with precise code execution, ensuring robust and reliable results.
 
 ---
 
-## 🦅 Mission Objective
+## Core Capabilities
 
-Murphy is not just another coding assistant. It is an **Agentic Predator** designed to surpass Claude Code, Codex, and existing alternatives through a dual-model orchestration pipeline, parallelized tool execution, and an unbreakable self-healing loop.
-
-!!! tip "Predator v3.2 is Online"
-    The latest build features **Atomic Session Persistence**, **Interactive TUI Navigation**, and **NVIDIA NIM** optimized execution.
+- **Dual-Model Orchestration**: Leverages Kimi K2 for high-level planning and Qwen-Coder for detailed implementation.
+- **Parallel Tool Execution**: Executes multiple file and system operations concurrently to maximize throughput.
+- **Self-Healing Loop**: Automatically identifies and recovers from execution errors or malformed model outputs.
+- **Persistence**: Maintains conversation state and session history across restarts using atomic JSON storage.
 
 ---
 
-## ⚡ Why Murphy Dominates
+## Comparison with Existing Tools
 
-| Capability | The Competition | **MURPHY** |
+| Capability | Standard Assistants | Murphy |
 | :--- | :--- | :--- |
-| **Orchestration** | Single Model | **Kimi K2 + Qwen3-Coder** |
-| **Execution** | Sequential | **Parallel Pipeline (Promise.all)** |
-| **Stability** | Stops on Error | **Self-Healing Loop** |
-| **Interface** | Basic Text | **Living Hierarchy TUI** |
-| **Memory** | Volatile | **Atomic JSON Persistence** |
+| **Orchestration** | Single Model | Dual-Model (Kimi + Qwen) |
+| **Execution** | Sequential | Parallel (Async Pipeline) |
+| **Reliability** | Fail-on-error | Automated Recovery Loop |
+| **Interface** | CLI / Chat | Real-time TUI |
 
 ---
 
-## 🏗️ Core Architecture
+## System Overview
 
 ```mermaid
 graph TD
-    User([User Request]) --> Engine[Dual-Model Engine]
+    User([User Request]) --> Engine[Orchestration Engine]
     subgraph Engine
-        Kimi[Kimi K2 Strategic Planner]
-        Qwen[Qwen3 Surgical Operator]
+        Kimi[Strategic Planner]
+        Qwen[Code Operator]
     end
-    Kimi -->|Plan| Qwen
-    Qwen -->|Parallel Tools| Pipeline[Execution Pipeline]
-    Pipeline -->|Result| TUI[Living Hierarchy UI]
-    TUI -->|Iteration| User
+    Kimi -->|Execution Plan| Qwen
+    Qwen -->|Parallel Tool Calls| Pipeline[Task Pipeline]
+    Pipeline -->|Result Data| TUI[Terminal UI]
+    TUI -->|Feedback| User
 ```
 
 ---
 
-## 🔥 Next Steps
+## Getting Started
 
-- [**Install the Predator**](installation.md)
-- [**Master Operation**](usage.md)
-- [**Explore the Tools**](tools.md)
+To begin using Murphy, follow our [Installation Guide](installation.md) or explore the [Usage Guide](usage.md) to understand the command hierarchy and toolset.

@@ -1,64 +1,53 @@
-# ⚡ Operational Manual: Usage
+# Usage Guide
 
-Mastering Murphy requires understanding the interface and the execution flow.
+This guide covers the standard operation of the Murphy TUI and available command sequences.
 
 ---
 
-## 🏎️ Launching the Interface
+## Command Line Interface
 
-Once launched, you are greeted by the **Predator TUI**. This is where missions are defined and executed.
+Launch Murphy from any authorized directory to begin a session.
 
 ```bash
 murphycode
 ```
 
-### ⌨️ Tactical Keyboard Controls
+### Keyboard Shortcuts
 
-| Key | Action |
+| Shortcut | Description |
 | :--- | :--- |
-| `Enter` | Submit mission parameters |
-| `↑` / `↓` | Navigate command history |
-| `ESC` | Abort current task execution |
-| `Ctrl + L` | Instant screen wipe (clears UI) |
-| `Ctrl + C` | Force exit predator |
+| `Enter` | Submit the current input. |
+| `Up` / `Down` | Navigate through previous command history. |
+| `Esc` | Abort a running task or tool execution. |
+| `Ctrl + L` | Clear the terminal display. |
+| `Ctrl + C` | Safely terminate the application. |
 
 ---
 
-## 📜 Mission Command Intel (Slash Commands)
+## Built-in Commands
 
-Murphy supports direct tactical commands to manage the state.
+Murphy supports several internal commands for session management.
 
 | Command | Action |
 | :--- | :--- |
-| `/new` | Resets the agent and clears current context |
-| `/clear` | Wipes only the visual message history |
-| `/help` | Displays the command intelligence overview |
-| `exit` | Closes the platform |
+| `/new` | Resets the agent state and clears conversation context. |
+| `/clear` | Clears the message history from the display. |
+| `/help` | Displays a list of available tools and system information. |
+| `exit` | Closes the Murphy session. |
 
 ---
 
-## 🧠 Strategic Execution Flow
+## Execution Workflow
 
-When you provide a request, Murphy enters a high-speed iteration loop:
+Murphy operates in an iterative loop consisting of several distinct phases:
 
-1.  **Reasoning Phase (Kimi K2)**: Strategic breakdown of your request.
-2.  **Permission Step**: If a dangerous tool (disk write/shell) is needed, Murphy halts for a `[y/N]` confirmation. (1)
-3.  **Execution Phase (Qwen3)**: Surgical tool usage.
-4.  **Verification Phase**: Checking results to ensure mission success.
-
-{ .annotate }
-
-1.  **Safety First**: You can whitelist "Safe Commands" in the configuration to skip this step for read-only tasks.
+1.  **Planning**: The strategic model (Kimi K2) analyzes the request and produces an execution plan.
+2.  **Validation**: If destructive tools or shell commands are required, the user is prompted for confirmation (`[y/N]`).
+3.  **Execution**: The coding model (Qwen-Coder) executes the planned tools in parallel where possible.
+4.  **Reporting**: Results are streamed back to the TUI in real-time for review.
 
 ---
 
-## 🛠️ Advanced Operation: Global Access
+## Global Workspace Support
 
-Since Murphy v3.2, you can jump into any folder and launch:
-
-```bash
-cd /path/to/any/project
-murphy
-```
-
-Murphy will automatically detect the local context and begin reconnaissance.
+As of version 3.2, Murphy can be executed within any directory. It will automatically resolve the local path as the working directory, allowing for cross-project mobility.

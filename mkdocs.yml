@@ -1,6 +1,6 @@
-site_name: MURPHY
+site_name: Murphy Documentation
 site_url: https://pranav271103.github.io/Murphy/
-site_description: The High-Speed Coding Predator. An agentic coding platform powered by dual-model orchestration.
+site_description: An agentic coding assistant powered by dual-model orchestration and parallel tool execution.
 repo_name: pranav271103/Murphy
 repo_url: https://github.com/pranav271103/Murphy
 
@@ -64,11 +64,11 @@ plugins:
 
 nav:
   - Home: index.md
-  - 🛠️ Installation: installation.md
-  - ⚡ Operation Manual: usage.md
-  - 🧠 Predator Anatomy: architecture.md
-  - 🔨 Tactical Tools: tools.md
-  - 🤝 Tactical Contribution: contributing.md
+  - Installation: installation.md
+  - Usage Guide: usage.md
+  - Architecture: architecture.md
+  - Tool Reference: tools.md
+  - Contributing: contributing.md
 
 extra_css:
   - stylesheets/extra.css

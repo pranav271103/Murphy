@@ -1,53 +1,45 @@
-# 🧠 Predator Anatomy: Architecture
+# Architecture
 
-Murphy's dominance is mathematically derived from its multi-layer architecture.
-
----
-
-## 🏗️ The Dual-Model Brain
-
-Murphy separates "Thinking" from "Doing" to prevent the logical stalls common in single-model agents.
-
-### 1. The Strategic Core (Kimi K2)
-Kimi K2 functions as the **General**. It does not code; it plans. It analyzes the entire codebase and defines the path forward.
-- **Strength**: Long-context reasoning & massive planning trees.
-- **Latency**: Sub-30s planning cycles.
-
-### 2. The Surgical Blade (Qwen3-Coder)
-Qwen3-Coder functions as the **Operator**. It receives orders from Kimi and executes them with surgical precision.
-- **Strength**: Elite coding ability & tool-calling fidelity.
-- **Execution**: Real-time streaming output.
+Murphy is built on a modular, dual-model architecture designed to separate high-level reasoning from low-level code implementation.
 
 ---
 
-## 🔗 The Unbreakable Engine
+## Dual-Model System
 
-Even if a model hallucinations a tool call, Murphy has a redundant **Text-to-Tool Parser**.
+Traditional AI agents often suffer from "reasoning decay" when tasked with simultaneous planning and coding. Murphy mitigates this by assigning these tasks to specialized models.
 
-```mermaid
-graph LR
-    A[Model Output] --> B{Valid JSON?}
-    B -- Yes --> C[Execute Direct]
-    B -- No --> D[Activate Redundant Parser]
-    D --> E[Regex Extraction]
-    E --> F[Tool Execution]
-```
+### Strategic Planning (Kimi K2)
+Kimi K2 serves as the orchestrator. It specializes in large-context processing and logical decomposition of complex requests.
+- **Role**: Plan generation, dependency analysis, and context management.
+- **Context Handling**: Optimized for deep codebase exploration.
 
-### 🚄 Parallelized Pipeline
-Unlike other agents that read files one-by-one, Murphy uses `Promise.all` to saturate its I/O bandwidth.
-- **Batch Processing**: Up to 10 concurrent tools.
-- **Zero Stall**: If one file fails, the rest continue.
+### Code Implementation (Qwen-Coder)
+Qwen-Coder is the specialized execution model. It translates orchestrator plans into validated tool calls.
+- **Role**: Code generation, file editing, and command execution.
+- **Performance**: High-speed token generation with standard tool-calling support.
 
 ---
 
-## 💾 Session Intelligence
+## The Execution Pipeline
 
-Every mission is persisted to `.murphy_session.json` using **Atomic Writes**.
-- **Resilience**: Even if the power fails, your history survives.
-- **Pruning**: Murphy automatically manages token context to keep your missions fast and cheap.
+Murphy uses an asynchronous, parallelized pipeline to execute system operations.
+
+### Parallelization
+Multiple I/O-bound operations (such as reading several files or searching directories) are executed concurrently using `Promise.all`. This significantly reduces the total latency of multi-file refactoring tasks.
+
+### Redundant Parsing
+In cases where a model produces malformed tool parameters, Murphy activates a secondary regex-based parser. This ensures the execution loop remains online even when the API response deviates from the expected schema.
 
 ---
 
-## 🖥️ UI Stack
-- **React + Ink**: The core of the Living Hierarchy TUI.
-- **Error Boundaries**: Native React crash protection ensuring Murphy stays online during extreme bugs.
+## State and Persistence
+
+Murphy implements session persistence using atomic file operations. 
+- **Session Data**: Stored in `.murphy_session.json`.
+- **Integrity**: Files are written to temporary locations first and moved to the final destination to prevent data corruption during crashes.
+- **Context Window**: History is automatically pruned to keep the token count within optimal processing limits.
+
+---
+
+## Frontend Technology
+The TUI is built using **React** and **Ink**, providing a reactive component-based UI inside the terminal environment. A global **Error Boundary** is implemented to catch and isolate UI-level exceptions.

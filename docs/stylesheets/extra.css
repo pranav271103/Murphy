@@ -1,54 +1,36 @@
 :root {
-  --md-primary-fg-color: #000000;
-  --md-accent-fg-color: #00e5ff;
+  --md-primary-fg-color: #1a1a1a;
+  --md-accent-fg-color: #008ba3;
 }
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #000000;
-  --md-accent-fg-color: #00e5ff;
-  --md-default-bg-color: #0a0a0c;
-  --md-code-bg-color: #121214;
+  --md-primary-fg-color: #1a1a1a;
+  --md-accent-fg-color: #00acc1;
+  --md-default-bg-color: #121212;
+  --md-code-bg-color: #1e1e1e;
 }
 
-/* Predator Glow Effect for code blocks */
+/* Professional clean code blocks */
 .md-content__inner pre {
-  border: 1px solid #00e5ff33;
-  box-shadow: 0 0 15px #00e5ff11;
-  border-radius: 8px;
+  border: 1px solid #333;
+  border-radius: 4px;
 }
 
-/* Admonition Glows */
-.md-typeset .admonition.tip {
-  border-left-color: #00e5ff;
-  background-color: #00e5ff0a;
-}
-.md-typeset .admonition.tip:before {
-  background-color: #00e5ff;
+/* Subtle admonitions */
+.md-typeset .admonition {
+  border-left-width: .2rem;
+  border-radius: .1rem;
 }
 
 /* Mermaid Diagram Styling */
 .mermaid {
-  background-color: #121214 !important;
-  border-radius: 8px;
+  background-color: #1e1e1e !important;
+  border-radius: 4px;
   padding: 1rem;
 }
 
-/* Custom "TUI" look for some text */
-.tui-accent {
-  color: #00e5ff;
-  font-family: "Courier New", Courier, monospace;
-  font-weight: bold;
-}
-
-/* Navigation Hover Effects */
-.md-nav__link:hover {
-  color: #00e5ff !important;
-}
-
-/* Logo pulse animation */
-.md-logo img {
-  transition: transform 0.3s ease;
-}
-.md-logo:hover img {
-  transform: scale(1.1);
+/* Technical Accent */
+.tech-accent {
+  color: #00acc1;
+  font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
 }

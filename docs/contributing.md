@@ -1,49 +1,44 @@
-# 🤝 Tactical Contribution: Development
+# Contributing
 
-Join the elite team building the future of autonomous coding.
-
----
-
-## 🏗️ Development Setup
-
-1.  **Fork \& Clone** the target repository.
-2.  **Install Base**: `npm install`
-3.  **Build Engine**: `npm run build`
-4.  **Launch Watcher**: `npm run dev` (Hot reloads the TUI)
+We welcome contributions to the Murphy project. Please follow our technical standards and guidelines.
 
 ---
 
-## 📜 Coding Standards
+## Development Environment Setup
 
-- **TypeScript**: Mandatory strict typing.
-- **Prettier**: Use our `.prettierrc` for formatting.
-- **ESLint**: Ensure your code passes mission-ready linting.
+1.  **Fork and Clone**: Fork the repository on GitHub and clone your fork locally.
+2.  **Install Dependencies**: Use `npm install` to set up the development environment.
+3.  **Build**: Execute `npm run build` to compile the TypeScript source into the distributable JavaScript.
+4.  **Watch Mode**: Use `npm run dev` to enable hot-reloading during TUI development.
 
 ---
 
-## 🧪 Intelligence Testing
+## Technical Standards
 
-Before pushing changes, run the test suite:
+- **TypeScript**: All source code must be strictly typed.
+- **Linting**: Run `npm run lint` to ensure your code follows the project's stylistic guidelines.
+- **Formatting**: We use Prettier for code consistency. Ensure your editor is configured to use the `.prettierrc` located in the project root.
+
+---
+
+## Testing
+
+Ensure all changes are verified with unit tests. We use **Vitest** for low-latency test execution.
 
 ```bash
 npm test
 ```
 
-We use **Vitest** for high-speed unit testing of tool handlers and the agent loop.
+Tests should cover:
+- New tool handler logic.
+- Agent loop state transitions.
+- Path resolution and security validation.
 
 ---
 
-## 🚀 Deployment Pipeline
+## Submission Process
 
-Murphy uses **GitHub Actions** for automatic deployment.
-- Pushing to `main` triggers a doc build and deploy to GitHub Pages.
-- Tool updates are automatically verified against the TUI.
-
----
-
-## 🦅 Acknowledgments
-
-Special thanks to:
-- **NVIDIA NIM** for the GPU-accelerated brains.
-- **Moonshot AI \& Alibaba** for the elite models.
-- **The Ink Community** for the TUI foundation.
+1.  Create a separate branch for your feature or bug fix.
+2.  Maintain a clean commit history with descriptive messages.
+3.  Submit a Pull Request targeting the `main` branch.
+4.  Participate in the code review process to ensure high-quality integrations.

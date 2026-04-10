@@ -1,51 +1,51 @@
-# 🔨 Tactical Tools: The Arsenal
+# Tool Reference
 
-Murphy is equipped with a high-performance toolset for project manipulation.
+Murphy utilizes a suite of verified tools to interact with the local file system and the web.
 
 ---
 
-## 📂 File System Operations
+## File System Tools
 
-| Tool | Capability | Parameters |
+| Tool | Description | Parameters |
 | :--- | :--- | :--- |
-| `read_file` | High-speed content retrieval | `path`, `offset`, `limit` |
-| `write_file` | Atomic file creation | `path`, `content` |
-| `edit_file` | Surgical code replacement | `path`, `old_string`, `new_string` |
-| `delete_file` | Target termination | `path` |
-| `list_directory` | Reconnaissance | `path`, `recursive`, `pattern` |
-| `create_directory` | Base expansion | `path` |
+| `read_file` | Reads file content with optional line-based pagination. | `path`, `offset`, `limit` |
+| `write_file` | Writes content to a file, creating directories as needed. | `path`, `content` |
+| `edit_file` | Performs a surgical search-and-replace on a targeted string. | `path`, `old_string`, `new_string` |
+| `delete_file` | Removes a specified file from the system. | `path` |
+| `list_directory` | Lists directory contents with recursive support. | `path`, `recursive`, `pattern` |
+| `create_directory` | Creates a new directory or nested directory structure. | `path` |
 
 ---
 
-## ⚙️ System Control
+## System Integration
 
-### `run_command`
-The primary tool for execution. In Windows missions, Murphy automatically selects **PowerShell** for maximum compatibility.
+### run_command
+Executes shell commands within the host environment. On Windows systems, Murphy defaults to **PowerShell** for enhanced security and functionality.
 
-- **Timeout**: Hard cap of 2 minutes (configurable).
-- **Hardening**: Prevents OOM by truncating massive outputs.
-- **Interruption**: Linked to `AbortSignal` for instant cancellation.
-
----
-
-## 🔍 Intelligence Gathering
-
-### `grep` & `glob`
-Standard searching is too slow. Murphy uses optimized pattern matching to find targets across thousands of files in milliseconds.
-
-### `fetch_url`
-Web-enabled reconnaissance. Use this to read documentation from the web or fetch external assets.
-- **SSRF Protected**: Explicitly blocks access to internal networks.
+- **Timeouts**: Configurable execution limits to prevent hanging processes.
+- **Resource Management**: Truncates large outputs to maintain context window stability.
+- **Interruption**: Fully integrated with the `AbortSignal` API for safe process termination.
 
 ---
 
-## 🚦 Safety Protocols
+## Code Intelligence Tools
 
-Every tool call is wrapped in a **Permission Layer**.
-!!! danger "Destructive Action"
-    Actions like `delete_file` or `run_command` will ALWAYS prompt for a `[y/N]` confirmation unless configured otherwise.
-    ```bash
-    ⚠️ PERMISSION REQUIRED: run_command
-    {"command": "rm -rf ./"}
-    Allow? [Y]es / [N]o
-    ```
+### grep
+Searches for text patterns using optimized filesystem traversal. Ideal for finding references or function definitions across large codebases.
+
+### glob
+Discovers files matching specific patterns (e.g., `src/**/*.ts`).
+
+---
+
+## Network Utilities
+
+### fetch_url
+Retrieves content from public URLs. This is used for reading external documentation or fetching remote assets.
+- **Security**: Implements SSRF protection by blocking requests to local or private network addresses.
+
+---
+
+## Security and Confirmation
+
+By default, Murphy requires explicit user confirmation for any destructive or system-level operation (such as `run_command` or `delete_file`). Users can configure an allowlist to skip this prompt for trusted commands.
