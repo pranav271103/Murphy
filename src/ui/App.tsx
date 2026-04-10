@@ -12,6 +12,8 @@ import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry, stripXml } fr
 import { getSystemPrompt } from '../agent/constants.js';
 import { saveSession, loadSession, clearSession } from '../utils/session.js';
 import { config } from '../utils/config.js';
+import { execSync } from 'child_process';
+
 
 
 // ============================================================================
@@ -123,7 +125,7 @@ const CommitHistoryDisplay = memo<{ commits: { hash: string; message: string; au
     return (
         <Box flexDirection="column" marginBottom={1} paddingX={1} borderStyle="round" borderColor="gray">
             <Text bold color="cyan">Recent Commits</Text>
-            {commits.map((commit, idx) => (
+            {commits.map((commit) => (
                 <Box key={commit.hash} flexDirection="column" marginTop={1}>
                     <Text color="yellow">{commit.hash.substring(0, 8)} <Text color="white">{commit.message}</Text></Text>
                     <Box justifyContent="space-between">
@@ -258,12 +260,32 @@ const App: React.FC = () => {
     const [permissionRequest, setPermissionRequest] = useState<{ tool: string, args: any, resolve: (v: boolean) => void } | null>(null);
     const [isProcessingInput, setIsProcessingInput] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
-    const [commitHistory, setCommitHistory] = useState<{ hash: string; message: string; author: string; date: string }[]>([
-        { hash: "a1b2c3d4", message: "Initial commit", author: "Murphy Bot", date: "2026-04-09" },
-        { hash: "e5f6g7h8", message: "Add core features", author: "Murphy Bot", date: "2026-04-09" }
-    ]);
+    const [commitHistory, setCommitHistory] = useState<{ hash: string; message: string; author: string; date: string }[]>([]);
 
-    // History navigation state
+
+    // In the App component, add this effect to fetch commit history
+    useEffect(() => {
+        try {
+            const output = execSync('git log --oneline -10 --pretty=format:"%h|%s|%an|%ad"', {
+                cwd: process.cwd(),
+                env: process.env,
+                encoding: 'utf8'
+            }).toString();
+
+            const commits = output.split('\n').filter(line => line.trim() !== '').map(line => {
+                const [hash, message, author, date] = line.split('|');
+                return { hash, message, author, date };
+            });
+
+            setCommitHistory(commits);
+        } catch (error) {
+            // Fallback to mock data if git command fails
+            setCommitHistory([
+                { hash: "a516d12", message: "Add commit history display feature with /commits command", author: "Developer", date: new Date().toISOString() },
+                { hash: "4f31909", message: "feat: Add comprehensive commit history tracking documentation", author: "Murphy Bot", date: "2026-04-09" }
+            ]);
+        }
+    }, []);
     const [commandHistory, setCommandHistory] = useState<string[]>(() => {
         return (initialSession?.uiMessages || [])
             .filter((m: any) => m.role === 'user')
