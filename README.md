@@ -11,7 +11,7 @@ Built with dual-model orchestration, parallel execution, and an unbreakable exec
 ![License](https://img.shields.io/badge/license-MIT-00ff99)
 ![Platform](https://img.shields.io/badge/platform-Node.js%2018+-00ccff)
 
-![Murphy Screenshot](public/MurphyLanding.png)
+![Murphy Screenshot](public/MurphyMainPage.png)
 
 ## Why Murphy is Superior
 
