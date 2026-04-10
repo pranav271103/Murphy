@@ -6,8 +6,8 @@ repo_url: https://github.com/pranav271103/Murphy
 
 theme:
   name: material
-  logo: public/MurphyLogo.png
-  favicon: public/MurphyLogo.png
+  logo: assets/logo.png
+  favicon: assets/logo.png
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"

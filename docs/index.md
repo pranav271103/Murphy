@@ -1,5 +1,10 @@
 # Murphy Documentation
 
+<div align="center">
+  <img src="assets/logo.png" width="150" alt="Murphy Logo">
+  <h3>Efficient. Reliable. Autonomous.</h3>
+</div>
+
 Murphy is an agentic coding assistant designed for high-performance software engineering tasks. It utilizes a dual-model orchestration system to combine strategic planning with precise code execution, ensuring robust and reliable results.
 
 ---
