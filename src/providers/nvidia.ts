@@ -274,7 +274,6 @@ export class NVIDIAProvider {
                     );
                     const result = await this.processStream(stream as any, onStream, signal);
 
-                    console.log(`[NVIDIA] ${model} stream completed in ${Math.round(performance.now() - startTime)}ms`);
                     return result;
                 } else {
                     // Non-streaming mode
@@ -284,7 +283,6 @@ export class NVIDIAProvider {
                     );
 
                     const latency = Math.round(performance.now() - startTime);
-                    console.log(`[NVIDIA] ${model} completed in ${latency}ms`);
 
                     const choice = response.choices[0];
                     if (!choice) {
