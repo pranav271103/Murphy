@@ -48,7 +48,7 @@ async function main() {
     }
 
     if (args.includes('--version') || args.includes('-v')) {
-        console.log('Murphy v3.2.0');
+        console.log('Murphy v3.4.0');
         process.exit(0);
     }
 

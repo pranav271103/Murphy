@@ -4,8 +4,8 @@
 
 Built with dual-model orchestration, parallel execution, and an unbreakable execution loop, Murphy delivers surgical precision at predator speed.
 
-![Version](https://img.shields.io/badge/version-3.2.0-ff0066)
-[![Documentation](https://img.shields.io/badge/docs-v3.2.0-blue)](https://pranav271103.github.io/Murphy/)
+![Version](https://img.shields.io/badge/version-3.4.0-ff0066)
+[![Documentation](https://img.shields.io/badge/docs-v3.4.0-blue)](https://pranav271103.github.io/Murphy/)
 [![Deploy Docs](https://github.com/pranav271103/Murphy/actions/workflows/docs.yml/badge.svg)](https://github.com/pranav271103/Murphy/actions/workflows/docs.yml)
 ![GitHub Packages](https://img.shields.io/badge/GitHub--Packages-active-brightgreen?logo=github)
 ![License](https://img.shields.io/badge/license-MIT-00ff99)
@@ -35,7 +35,7 @@ Built with dual-model orchestration, parallel execution, and an unbreakable exec
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MURPHY v3.0 PREDATOR                         │
+│                    MURPHY v3.4 PREDATOR                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  DUAL-MODEL ORCHESTRATION                                       │
 │  ┌──────────────┐    ┌──────────────┐                           │
@@ -303,8 +303,8 @@ npm run dev
 
 ## Roadmap
 
-- [x] Multi-session persistence (v3.2)
-- [x] Git integration base (v3.2)
+- [x] Multi-session persistence (v3.4)
+- [x] Git integration base (v3.4)
 - [ ] WebSocket support for remote execution
 - [ ] Plugin system for custom tools
 - [ ] LSP integration for code intelligence

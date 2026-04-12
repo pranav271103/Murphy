@@ -20,6 +20,7 @@ export interface ToolExecutionEvent {
     startTime: number;
     result?: string;
     error?: string;
+    liveOutput?: string;
     retryCount?: number;
 }
 
@@ -62,13 +63,21 @@ const TEXT_TOOL_PATTERNS = [
 ];
 
 /**
- * Strip XML tags from content for clean UI display
+ * Clean text for Predator TUI - Strips XML and Markdown beautification
  */
 export const stripXml = (text: string): string => {
     if (!text) return '';
     return text
-        .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
-        .replace(/<[^>]+>/g, '')
+        .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '') // Remove tool calls
+        .replace(/<[^>]+>/g, '') // Remove remaining XML
+        .replace(/\*\*([\s\S]*?)\*\*/g, '$1') // Strip bold **
+        .replace(/\*([\s\S]*?)\*/g, '$1') // Strip italic *
+        .replace(/__([\s\S]*?)__/g, '$1') // Strip bold __
+        .replace(/_([\s\S]*?)_/g, '$1') // Strip italic _
+        .replace(/`([\s\S]*?)`/g, '$1') // Strip code `
+        .replace(/~~([\s\S]*?)~~/g, '$1') // Strip strikethrough
+        .replace(/^[ \t]*[*-] /gm, '• ') // Convert markdown lists to clean bullets
+        .replace(/^[ \t]*#+ /gm, '❯ ') // Convert headers to predator prompt icons
         .trim();
 };
 
@@ -235,7 +244,12 @@ export class AgentLoop {
             onUpdate('tool_start', { event, attempt });
 
             try {
-                const result = await handler(event.args, { signal: options?.signal });
+                const result = await handler(event.args, {
+                    signal: options?.signal,
+                    onProgress: (message: string) => {
+                        onUpdate('tool_progress', { id: event.id, message });
+                    }
+                });
 
                 event.status = 'success';
                 event.result = String(result).slice(0, 5000); // Limit stored result
@@ -409,12 +423,15 @@ export class AgentLoop {
                     };
                 }
 
-                // Prune old context if needed
-                if (this.messages.length > 40) {
-                    onUpdate('phase_change', { phase: 'reasoning', message: '🧹 Pruning context...' });
+                // Prune old context if needed (Objective: Keep system prompt and initial request)
+                if (this.messages.length > 50) {
+                    onUpdate('phase_change', { phase: 'reasoning', message: '🧹 Consolidating context...' });
                     const sysPrompt = this.messages[0];
-                    const recentMsgs = this.messages.slice(-25);
-                    this.messages = [sysPrompt, ...recentMsgs];
+                    const initialRequest = this.messages.slice(1, 3); // User request + Phase 1 Reasoning
+                    const recentMsgs = this.messages.slice(-30);
+
+                    // Filter out duplicates if overlap
+                    this.messages = [sysPrompt, ...initialRequest, ...recentMsgs.filter(m => !initialRequest.includes(m) && m !== sysPrompt)];
                 }
 
                 this.telemetry.iteration++;

@@ -1,6 +1,6 @@
 {
   "name": "@pranav271103/murphycode",
-  "version": "3.2.0",
+  "version": "3.4.0",
   "description": "Murphy - The High-Speed Coding Predator. An agentic coding platform powered by dual-model orchestration.",
   "type": "module",
   "bin": {

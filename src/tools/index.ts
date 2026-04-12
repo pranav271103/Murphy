@@ -5,6 +5,7 @@ import { glob } from 'glob';
 import { performance } from 'perf_hooks';
 import { resolveWorkspacePath } from '../utils/paths.js';
 import { config } from '../utils/config.js';
+import { lockManager } from '../utils/locks.js';
 
 // execAsync removed - using spawn-based execution instead
 
@@ -17,7 +18,10 @@ export interface ToolResult {
 }
 
 interface ToolHandler {
-    (args: any, context?: { signal?: AbortSignal }): Promise<string>;
+    (args: any, context?: {
+        signal?: AbortSignal,
+        onProgress?: (message: string) => void
+    }): Promise<string>;
 }
 
 /**
@@ -27,7 +31,8 @@ async function executeCommand(
     command: string,
     cwd: string = '.',
     timeoutArg?: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onProgress?: (data: string) => void
 ): Promise<{ stdout: string; stderr: string }> {
     const timeout = timeoutArg || config.toolTimeout || 120000;
     const isWin = process.platform === 'win32';
@@ -46,19 +51,25 @@ async function executeCommand(
         const MAX_OUTPUT = 10000;
 
         child.stdout.on('data', (data) => {
+            const str = data.toString();
+            if (onProgress) onProgress(str);
+
             if (stdout.length < MAX_OUTPUT) {
-                stdout += data.toString();
+                stdout += str;
                 if (stdout.length >= MAX_OUTPUT) {
-                    stdout = stdout.slice(0, MAX_OUTPUT) + '\n...[STDOUT TRUNCATED - OVER LIMIT]';
+                    stdout = stdout.slice(0, MAX_OUTPUT) + '\n...[STDOUT TRUNCATED]';
                 }
             }
         });
 
         child.stderr.on('data', (data) => {
+            const str = data.toString();
+            if (onProgress) onProgress(`[STDERR] ${str}`);
+
             if (stderr.length < MAX_OUTPUT) {
-                stderr += data.toString();
+                stderr += str;
                 if (stderr.length >= MAX_OUTPUT) {
-                    stderr = stderr.slice(0, MAX_OUTPUT) + '\n...[STDERR TRUNCATED - OVER LIMIT]';
+                    stderr = stderr.slice(0, MAX_OUTPUT) + '\n...[STDERR TRUNCATED]';
                 }
             }
         });
@@ -114,6 +125,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
         const startTime = performance.now();
         try {
             const safePath = resolveWorkspacePath(filePath);
+            const stats = await fs.stat(safePath);
+            const MAX_SIZE = 5 * 1024 * 1024; // 5MB safety limit
+
+            if (stats.size > MAX_SIZE) {
+                return `⚠️ Error: File is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Maximum allowed is 5MB for safety. Use smaller read limits.`;
+            }
+
             const content = await fs.readFile(safePath, 'utf-8');
             const lines = content.split('\n');
 
@@ -142,6 +160,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
         content: string;
     }) => {
         const startTime = performance.now();
+        const release = await lockManager.acquire(filePath);
         try {
             const safePath = resolveWorkspacePath(filePath);
             const dir = path.dirname(safePath);
@@ -151,6 +170,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `✅ Successfully wrote ${content.length} chars to ${filePath} (${elapsed}ms)`;
         } catch (error: any) {
             return `❌ Error writing file: ${error.message}`;
+        } finally {
+            release();
         }
     },
 
@@ -167,6 +188,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
         new_string: string;
     }) => {
         const startTime = performance.now();
+        const release = await lockManager.acquire(filePath);
         try {
             const safePath = resolveWorkspacePath(filePath);
             const content = await fs.readFile(safePath, 'utf-8');
@@ -181,7 +203,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
             }
 
             const newContent = content.replaceAll(old_string, new_string);
-            
+
             // Write a simple backup first
             await fs.writeFile(`${safePath}.bak`, content, 'utf-8');
             await fs.writeFile(safePath, newContent, 'utf-8');
@@ -190,6 +212,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `✅ Successfully edited ${safePath} (backup created at .bak) - replaced ${old_string.length} chars with ${new_string.length} chars (${elapsed}ms)`;
         } catch (error: any) {
             return `❌ Error editing file: ${error.message}`;
+        } finally {
+            release();
         }
     },
 
@@ -198,6 +222,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
      */
     delete_file: async ({ path: filePath }: { path: string }) => {
         const startTime = performance.now();
+        const release = await lockManager.acquire(filePath);
         try {
             const safePath = resolveWorkspacePath(filePath);
             // Create backup dir for deleted files? For now, we'll just delete safely
@@ -206,6 +231,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `✅ Successfully deleted ${filePath} (${elapsed}ms)`;
         } catch (error: any) {
             return `❌ Error deleting file: ${error.message}`;
+        } finally {
+            release();
         }
     },
 
@@ -273,10 +300,10 @@ export const toolHandlers: Record<string, ToolHandler> = {
         command: string;
         cwd?: string;
         timeout?: number;
-    }, context?: { signal?: AbortSignal }) => {
+    }, context?: { signal?: AbortSignal; onProgress?: (msg: string) => void }) => {
         const startTime = performance.now();
         try {
-            const { stdout, stderr } = await executeCommand(command, cwd, timeout, context?.signal);
+            const { stdout, stderr } = await executeCommand(command, cwd, timeout, context?.signal, context?.onProgress);
             const elapsed = Math.round(performance.now() - startTime);
 
             let result = '';
@@ -300,42 +327,56 @@ export const toolHandlers: Record<string, ToolHandler> = {
     grep: async ({
         pattern,
         searchPath = '.',
-        glob: searchGlob = '*', // renamed to avoid shadowing glob import
+        glob: searchGlob = '*',
     }: {
         pattern: string;
         searchPath?: string;
         glob?: string;
     }) => {
         const startTime = performance.now();
+        const { createReadStream } = await import('fs');
+        const { createInterface } = await import('readline');
+
         try {
             const files = await glob(path.join(resolveWorkspacePath(searchPath), '**', searchGlob));
             const results: string[] = [];
+            const MAX_TOTAL_MATCHES = 100;
 
-            // Pre-compile regex safely
             let regex: RegExp | null = null;
             try {
-                regex = new RegExp(pattern, 'g');
+                regex = new RegExp(pattern, 'i');
             } catch (e) {
-                // Keep regex null if invalid (will fallback to includes)
+                // Fallback to literal if regex invalid
             }
 
-            for (const file of files.slice(0, 100)) {
+            for (const file of files.slice(0, 50)) {
+                if (results.length >= MAX_TOTAL_MATCHES) break;
+
                 try {
-                    const content = await fs.readFile(file, 'utf-8');
-                    const lines = content.split('\n');
-                    for (let idx = 0; idx < lines.length; idx++) {
-                        const line = lines[idx];
-                        if (line.includes(pattern) || (regex && regex.test(line))) {
-                            results.push(`${file}:${idx + 1}: ${line.trim()}`);
+                    const stats = await fs.stat(file);
+                    if (stats.size > 2 * 1024 * 1024) continue; // Skip files > 2MB for speed
+
+                    const rl = createInterface({
+                        input: createReadStream(file),
+                        crlfDelay: Infinity
+                    });
+
+                    let lineNum = 0;
+                    for await (const line of rl) {
+                        lineNum++;
+                        if ((regex && regex.test(line)) || line.includes(pattern)) {
+                            results.push(`${path.relative(process.cwd(), file)}:${lineNum}: ${line.trim().slice(0, 500)}`);
                         }
+                        if (results.length >= MAX_TOTAL_MATCHES) break;
                     }
+                    rl.close();
                 } catch {
-                    // Skip binary or unreadable files
+                    // Skip inaccessible
                 }
             }
 
             const elapsed = Math.round(performance.now() - startTime);
-            return results.slice(0, 50).join('\n') + `\n\n[${results.length} matches in ${elapsed}ms]`;
+            return results.join('\n') + `\n\n[Found ${results.length} matches in ${elapsed}ms]`;
         } catch (error: any) {
             return `❌ Error searching: ${error.message}`;
         }
@@ -377,10 +418,19 @@ export const toolHandlers: Record<string, ToolHandler> = {
         try {
             const parsedUrl = new URL(url);
             const host = parsedUrl.hostname.toLowerCase();
-            
-            // Basic SSRF protection
-            if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('192.168.') || host.startsWith('10.')) {
-                throw new Error('SECURITY VIOLATION: Access to local network addresses is forbidden.');
+
+            // Enhanced SSRF protection
+            const isLocal = host === 'localhost' ||
+                host === '127.0.0.1' ||
+                host === '0.0.0.0' ||
+                host === '::1' ||
+                host.startsWith('192.168.') ||
+                host.startsWith('10.') ||
+                host.startsWith('172.') || // Covers 172.16.x.x - 172.31.x.x roughly
+                host.startsWith('169.254.'); // Link-local
+
+            if (isLocal) {
+                throw new Error('SECURITY VIOLATION: Access to local or private network addresses is forbidden.');
             }
 
             const response = await fetch(url, {

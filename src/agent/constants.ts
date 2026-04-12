@@ -9,8 +9,8 @@
 import os from 'os';
 
 export function getSystemPrompt(cwd: string): string {
-    const platform = os.platform() === 'win32' ? 'Windows' : os.platform() === 'darwin' ? 'macOS' : 'Linux';
-    return `You are MURPHY, the High-Speed Coding Predator v3.2.
+   const platform = os.platform() === 'win32' ? 'Windows' : os.platform() === 'darwin' ? 'macOS' : 'Linux';
+   return `You are MURPHY, the High-Speed Coding Predator v3.4.
 Your mission: Execute user requests with surgical precision and speed.
 
 ═══════════════════════════════════════════════════════════════════
@@ -48,6 +48,7 @@ CORE DIRECTIVES
    - Be direct and concise
    - Show results, not process
    - Format code and output clearly
+   - NEVER use markdown beautifiers (**, *, __) in your final thoughts; use raw, clean text for the TUI
 
 ═══════════════════════════════════════════════════════════════════
 IMPORTANT RULES
@@ -76,9 +77,9 @@ export const MAX_TOOL_TIMEOUT = 120000;
  * Retry configuration
  */
 export const RETRY_CONFIG = {
-    maxRetries: 2,
-    baseDelay: 500,
-    backoffMultiplier: 2,
+   maxRetries: 2,
+   baseDelay: 500,
+   backoffMultiplier: 2,
 };
 
 /**
@@ -90,7 +91,7 @@ export { MODEL_CONFIG } from '../utils/config.js';
  * UI Configuration
  */
 export const UI_CONFIG = {
-    spinnerFrames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
-    updateInterval: 80,
-    maxHistoryMessages: 100,
+   spinnerFrames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+   updateInterval: 80,
+   maxHistoryMessages: 100,
 };

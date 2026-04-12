@@ -86,10 +86,17 @@ const ToolAuditStep = memo<{ event: ToolExecutionEvent }>(({ event }) => {
 
     const durationText = event.duration > 0 ? ` (${event.duration}ms)` : '';
     return (
-        <Box paddingLeft={1}>
-            <Text color={statusColor}>{statusIcon}</Text>
-            <Text color="white"> {event.name}</Text>
-            <Text color="gray" dimColor>{durationText}</Text>
+        <Box flexDirection="column">
+            <Box paddingLeft={1}>
+                <Text color={statusColor}>{statusIcon}</Text>
+                <Text color="white"> {event.name}</Text>
+                <Text color="gray" dimColor>{durationText}</Text>
+            </Box>
+            {event.liveOutput && (
+                <Box paddingLeft={4}>
+                    <Text color="gray" dimColor italic>{event.liveOutput}</Text>
+                </Box>
+            )}
         </Box>
     );
 });
@@ -178,7 +185,7 @@ const StreamingArea = memo<{ content: string; active: boolean }>(({ content, act
     );
 });
 
-const TerminalOutput = memo<{ 
+const TerminalOutput = memo<{
     messages: Message[];
     commitHistory: { hash: string; message: string; author: string; date: string }[];
     showCommits: boolean;
@@ -236,9 +243,9 @@ const TelemetryBar = memo<{
 const PredatorInputArea = memo<{ input: string; isProcessing: boolean }>(({ input, isProcessing }) => {
     return (
         <Box flexDirection="column" marginTop={1} width="100%">
-            <Box 
-                borderStyle="round" 
-                borderColor={isProcessing ? "yellow" : "cyan"} 
+            <Box
+                borderStyle="round"
+                borderColor={isProcessing ? "yellow" : "cyan"}
                 paddingX={2}
                 width="100%"
             >
@@ -382,6 +389,17 @@ const App: React.FC = () => {
             case 'tool_failed':
             case 'tool_recovered':
                 setFullHistory((prev) => prev.map((t) => (t.id === data.event.id ? { ...t, ...data.event } : t)));
+                break;
+            case 'tool_progress':
+                setFullHistory((prev) => prev.map((t) => {
+                    if (t.id === data.id) {
+                        const newOutput = (t.liveOutput || '') + data.message;
+                        // Limit live output to last 5 lines for UI sanity
+                        const lines = newOutput.split('\n').slice(-5);
+                        return { ...t, liveOutput: lines.join('\n') };
+                    }
+                    return t;
+                }));
                 break;
             case 'telemetry':
                 setTelemetry(data.telemetry);
@@ -532,10 +550,10 @@ const App: React.FC = () => {
 
     return (
         <Box flexDirection="column" width="100%">
-            <TerminalOutput 
-                messages={messages} 
-                commitHistory={commitHistory} 
-                showCommits={showCommits} 
+            <TerminalOutput
+                messages={messages}
+                commitHistory={commitHistory}
+                showCommits={showCommits}
             />
 
             <ActiveWorkArea
@@ -562,9 +580,9 @@ const App: React.FC = () => {
             <Box flexDirection="column" marginTop={1}>
                 {/* Visual separator */}
                 <Box width="100%" height={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray" />
-                
+
                 <TelemetryBar telemetry={telemetry} isProcessing={status !== 'ready'} />
-                
+
                 <PredatorInputArea input={input} isProcessing={isProcessingInput} />
             </Box>
             <Box height={1} />
