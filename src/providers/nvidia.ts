@@ -199,7 +199,7 @@ export class NVIDIAProvider {
             });
 
             this.requestCache.set(cacheKey, newRequest);
-            
+
             // LRU-like simple cache eviction to prevent OOM
             if (this.requestCache.size > 50) {
                 const firstKey = this.requestCache.keys().next().value;
@@ -264,8 +264,6 @@ export class NVIDIAProvider {
                     requestParams.tool_choice = 'auto';
                 }
 
-                const startTime = performance.now();
-
                 if (onStream) {
                     // Streaming mode
                     const stream = await client.chat.completions.create(
@@ -281,8 +279,6 @@ export class NVIDIAProvider {
                         requestParams,
                         { signal }
                     );
-
-                    const latency = Math.round(performance.now() - startTime);
 
                     const choice = response.choices[0];
                     if (!choice) {
