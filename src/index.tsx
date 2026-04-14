@@ -74,8 +74,8 @@ async function main() {
         process.exit(1);
     }
 
-    // Show configuration banner
-    logConfig();
+    // Show configuration banner (Disabled for recording)
+    // logConfig();
 
     // Start the Ink application
     const { waitUntilExit } = render(
