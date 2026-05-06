@@ -59,7 +59,8 @@ export interface UpdatePayload {
  */
 const TEXT_TOOL_PATTERNS = [
     /<tool_call>\s*(?:<function=)?([\w-]+)>?\s*(?:<arguments=)?([\s\S]*?)(?:<\/arguments>)?(?:<\/tool_call>)/g,
-    /<tool_call>\s*```(?:json)?\s*\{\s*"name"\s*:\s*"([\w-]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}\s*```\s*<\/tool_call>/gi
+    /<tool_call>\s*```(?:json)?\s*\{\s*"name"\s*:\s*"([\w-]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}\s*```\s*<\/tool_call>/gi,
+    /functions\.([\w-]+):(\d+)\s+(\{[\s\S]*?\})/g
 ];
 
 /**

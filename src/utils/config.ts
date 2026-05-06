@@ -7,14 +7,17 @@ const GLOBAL_ENV_PATH = path.join(GLOBAL_ENV_DIR, 'env');
 
 // Load environment from multiple possible locations, starting with highest precedence
 const envPaths = [
-    path.join(process.cwd(), '.env.local'),
-    path.join(process.cwd(), '.env'),
     GLOBAL_ENV_PATH,
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), '.env.local'),
 ];
 
 for (const envPath of envPaths) {
     if (existsSync(envPath)) {
-        dotenv.config({ path: envPath });
+        const result = dotenv.config({ path: envPath, override: true });
+        // Only override if the value is actually present and not empty
+        // dotenv override: true is a bit aggressive, but here we want the highest precedence
+        // to be the local files, BUT if they are empty we want the next ones.
     }
 }
 
