@@ -24,3 +24,5 @@ test.js
 # Documentation
 site/
 .cache/
+ToDo.md
+docs/ANALYSIS_REPORT.md
