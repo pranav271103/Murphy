@@ -14,7 +14,7 @@ const envPaths = [
 
 for (const envPath of envPaths) {
     if (existsSync(envPath)) {
-        const result = dotenv.config({ path: envPath, override: true });
+        dotenv.config({ path: envPath, override: true });
         // Only override if the value is actually present and not empty
         // dotenv override: true is a bit aggressive, but here we want the highest precedence
         // to be the local files, BUT if they are empty we want the next ones.
