@@ -124,6 +124,14 @@ export function updateGlobalConfig(keys: {
     if (keys.nvidiaApiKey) {
         process.env.NVIDIA_API_KEY = keys.nvidiaApiKey;
         config.nvidiaApiKey = keys.nvidiaApiKey;
+        
+        // Propagate to model-specific keys if not explicitly provided
+        if (!keys.kimiApiKey) {
+            config.kimiApiKey = keys.nvidiaApiKey;
+        }
+        if (!keys.qwenApiKey) {
+            config.qwenApiKey = keys.nvidiaApiKey;
+        }
     }
     if (keys.kimiApiKey) {
         process.env.NVIDIA_API_KIMI = keys.kimiApiKey;
