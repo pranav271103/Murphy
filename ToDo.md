@@ -14,7 +14,7 @@ This list tracks the strategic actions required to push Murphy to the GitHub Tre
 
 ## 🛠️ Phase 3: Repository Health
 - [ ] **Tag Optimization**: Audit GitHub topics (ai, agent, coding-assistant, nvidia-nim, predator).
-- [ ] **Official Release v3.4.0**: Create a tagged release on GitHub with build artifacts.
+- [x] **Official Release v3.4.1**: Create a tagged release on GitHub with build artifacts.
 - [ ] **Star Hooks**: Add "Call to Action" for stars in the README and after successful tool executions.
 
 ## 📊 Phase 4: Competitive Moat
