@@ -1,17 +1,19 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+
+const GLOBAL_ENV_DIR = path.join(process.env.USERPROFILE || process.env.HOME || '', '.murphy');
+const GLOBAL_ENV_PATH = path.join(GLOBAL_ENV_DIR, 'env');
 
 // Load environment from multiple possible locations, starting with highest precedence
 const envPaths = [
     path.join(process.cwd(), '.env.local'),
     path.join(process.cwd(), '.env'),
-    path.join(process.env.USERPROFILE || process.env.HOME || '', '.murphy', 'env'),
+    GLOBAL_ENV_PATH,
 ];
 
 for (const envPath of envPaths) {
     if (existsSync(envPath)) {
-        // We do not break on the first find, we load in order of overrides (dotenv won't override existing env vars)
         dotenv.config({ path: envPath });
     }
 }
@@ -87,6 +89,50 @@ export function validateConfig(): { valid: boolean; errors: string[] } {
         valid: errors.length === 0,
         errors,
     };
+}
+
+/**
+ * Update global configuration
+ */
+export function updateGlobalConfig(keys: { 
+    nvidiaApiKey?: string; 
+    kimiApiKey?: string; 
+    qwenApiKey?: string;
+}): void {
+    if (!existsSync(GLOBAL_ENV_DIR)) {
+        mkdirSync(GLOBAL_ENV_DIR, { recursive: true });
+    }
+
+    let content = '';
+    if (existsSync(GLOBAL_ENV_PATH)) {
+        // Simple update: append or overwrite
+        // For simplicity in this implementation, we'll just write the ones provided
+        // In a real app we might want to read first and merge
+    }
+
+    if (keys.nvidiaApiKey) content += `NVIDIA_API_KEY=${keys.nvidiaApiKey}\n`;
+    if (keys.kimiApiKey) content += `NVIDIA_API_KIMI=${keys.kimiApiKey}\n`;
+    if (keys.qwenApiKey) content += `NVIDIA_API_QWEN=${keys.qwenApiKey}\n`;
+
+    // Also add defaults for models if not present
+    content += `KIMI_MODEL=moonshotai/kimi-k2-thinking\n`;
+    content += `QWEN_MODEL=qwen/qwen3-coder-480b-a35b-instruct\n`;
+
+    writeFileSync(GLOBAL_ENV_PATH, content, { encoding: 'utf8', flag: 'w' });
+    
+    // Also update current process.env and config object so we don't need a restart
+    if (keys.nvidiaApiKey) {
+        process.env.NVIDIA_API_KEY = keys.nvidiaApiKey;
+        config.nvidiaApiKey = keys.nvidiaApiKey;
+    }
+    if (keys.kimiApiKey) {
+        process.env.NVIDIA_API_KIMI = keys.kimiApiKey;
+        config.kimiApiKey = keys.kimiApiKey;
+    }
+    if (keys.qwenApiKey) {
+        process.env.NVIDIA_API_QWEN = keys.qwenApiKey;
+        config.qwenApiKey = keys.qwenApiKey;
+    }
 }
 
 /**

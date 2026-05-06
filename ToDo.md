@@ -3,8 +3,8 @@
 This list tracks the strategic actions required to push Murphy to the GitHub Trending tab.
 
 ## 🎯 Phase 1: Visual & Conversion
-- [ ] **Create Predator Demo GIF/Video**: Record a high-fidelity session of Murphy building a complex app.
-- [ ] **Top-of-README Hero Image**: Replace text-only intro with a visual banner or the demo GIF.
+- [x] **Create Predator Demo GIF/Video**: Record a high-fidelity session of Murphy building a complex app.
+- [x] **Top-of-README Hero Image**: Replace text-only intro with a visual banner or the demo GIF.
 - [ ] **Refine Performance Section**: Add hard data comparing Murphy's parallel execution speed to sequential competitors.
 
 ## 📢 Phase 2: Viral Launch

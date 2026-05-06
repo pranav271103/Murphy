@@ -2,7 +2,8 @@
 import React from 'react';
 import { render } from 'ink';
 import App from './ui/App.js';
-import { validateConfig, logConfig } from './utils/config.js';
+import Setup from './ui/Setup.js';
+import { validateConfig } from './utils/config.js';
 import { clearSession } from './utils/session.js';
 
 /**
@@ -60,26 +61,22 @@ async function main() {
     // Validate configuration before starting
     const validation = validateConfig();
 
-    if (!validation.valid) {
-        console.error('╔════════════════════════════════════════════════════════════╗');
-        console.error('║  MURPHY INITIALIZATION FAILED                              ║');
-        console.error('╠════════════════════════════════════════════════════════════╣');
-        validation.errors.forEach((error) => {
-            console.error(`║  ❌ ${error.padEnd(56)} ║`);
-        });
-        console.error('╚════════════════════════════════════════════════════════════╝\n');
-        console.error('Create a .env file with:');
-        console.error('  NVIDIA_API_KEY=your_api_key_here');
-        console.error('\nGet your API key at: https://build.nvidia.com/\n');
-        process.exit(1);
-    }
+    // Bootstrapper component to handle setup flow
+    const Bootstrapper = () => {
+        const [isConfigured, setIsConfigured] = React.useState(validation.valid);
 
-    // Show configuration banner (Disabled for recording)
-    // logConfig();
+        if (!isConfigured) {
+            return React.createElement(Setup, {
+                onComplete: () => setIsConfigured(true)
+            });
+        }
+
+        return React.createElement(App);
+    };
 
     // Start the Ink application
     const { waitUntilExit } = render(
-        React.createElement(App),
+        React.createElement(Bootstrapper),
         {
             stdout: process.stdout,
             stdin: process.stdin,

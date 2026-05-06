@@ -301,15 +301,6 @@ npm run dev
 - Most operations are I/O bound
 - Significant speedup on multi-file operations
 
-## Roadmap
-
-- [x] Multi-session persistence (v3.4)
-- [x] Git integration base (v3.4)
-- [ ] WebSocket support for remote execution
-- [ ] Plugin system for custom tools
-- [ ] LSP integration for code intelligence
-- [ ] Team collaboration features
-
 ## Contributing
 
 1. Fork the repository
