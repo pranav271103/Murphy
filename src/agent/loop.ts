@@ -97,6 +97,7 @@ export class AgentLoop {
     private messages: Message[] = [];
     private telemetry: LoopTelemetry;
     private executionLog: ToolExecutionEvent[] = [];
+    private missionPlan: string = '';
     private readonly MAX_ITERATIONS = 100;
     private readonly MAX_RETRIES = 2;
     private abortController: AbortController | null = null;

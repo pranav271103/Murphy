@@ -449,6 +449,34 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `❌ Error fetching URL: ${error.message}`;
         }
     },
+    analyze_project: async (args: { depth?: number }) => {
+        try {
+            const depth = args.depth || 2;
+            const files = await glob('**/*', { 
+                ignore: ['node_modules/**', 'dist/**', '.git/**'],
+                maxDepth: depth 
+            });
+            
+            const structure = files.reduce((acc: any, file) => {
+                const parts = file.split('/');
+                let current = acc;
+                parts.forEach((part, i) => {
+                    if (!current[part]) {
+                        current[part] = i === parts.length - 1 ? 'file' : {};
+                    }
+                    current = current[part];
+                });
+                return acc;
+            }, {});
+
+            return {
+                success: true,
+                output: `Project Radar Scan (Depth ${depth}):\n${JSON.stringify(structure, null, 2)}\n\nFound ${files.length} key files. Use read_file on entry points to begin mission.`
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
 };
 
 
