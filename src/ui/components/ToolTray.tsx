@@ -4,7 +4,7 @@ import { Box, Text } from 'ink';
 export interface ToolEvent {
     id: string;
     name: string;
-    status: 'pending' | 'running' | 'success' | 'failure';
+    status: 'pending' | 'running' | 'success' | 'failure' | 'recovered';
     duration?: number;
     error?: string;
 }
@@ -22,12 +22,12 @@ export const ToolTray: React.FC<ToolTrayProps> = ({ activeTools }) => {
             {activeTools.map((tool) => (
                 <Box key={tool.id} justifyContent="space-between">
                     <Box>
-                        <Text color={tool.status === 'running' ? 'yellow' : tool.status === 'success' ? 'green' : 'red'}>
-                            {tool.status === 'running' ? '▶' : tool.status === 'success' ? '✓' : '✗'}
+                        <Text color={tool.status === 'running' ? 'yellow' : tool.status === 'success' ? 'green' : tool.status === 'recovered' ? 'cyan' : 'red'}>
+                            {tool.status === 'running' ? '▶' : tool.status === 'success' ? '✓' : tool.status === 'recovered' ? '↺' : '✗'}
                         </Text>
                         <Text> {tool.name}</Text>
                     </Box>
-                    {tool.duration && <Text color="gray"> {tool.duration}ms</Text>}
+                    {!!tool.duration && <Text color="gray"> {tool.duration}ms</Text>}
                 </Box>
             ))}
         </Box>

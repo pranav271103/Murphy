@@ -469,12 +469,9 @@ export const toolHandlers: Record<string, ToolHandler> = {
                 return acc;
             }, {});
 
-            return {
-                success: true,
-                output: `Project Radar Scan (Depth ${depth}):\n${JSON.stringify(structure, null, 2)}\n\nFound ${files.length} key files. Use read_file on entry points to begin mission.`
-            };
+            return `Project Radar Scan (Depth ${depth}):\n${JSON.stringify(structure, null, 2)}\n\nFound ${files.length} key files. Use read_file on entry points to begin mission.`;
         } catch (error: any) {
-            return { success: false, error: error.message };
+            return `❌ Analysis Error: ${error.message}`;
         }
     }
 };

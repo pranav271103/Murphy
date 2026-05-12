@@ -9,7 +9,7 @@ import React, {
 import { Box, Text, useInput, useApp } from 'ink';
 import { AgentLoop, UpdateType, ToolExecutionEvent, LoopTelemetry } from '../agent/loop.js';
 import { getSystemPrompt } from '../agent/constants.js';
-import { saveSession, loadSession, clearSession } from '../utils/session.js';
+import { saveSession, loadSession } from '../utils/session.js';
 import { config } from '../utils/config.js';
 
 // Sub-components

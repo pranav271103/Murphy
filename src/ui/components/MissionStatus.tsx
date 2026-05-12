@@ -24,9 +24,9 @@ export const MissionStatus: React.FC<MissionStatusProps> = ({ telemetry, isProce
                 {telemetry && (
                     <Box paddingLeft={2}>
                         <Text color="gray">TOOLS: </Text>
-                        <Text color="white">{telemetry.completedTools}</Text>
+                        <Text color="white">{String(telemetry.completedTools)}</Text>
                         <Text color="gray"> | ITER: </Text>
-                        <Text color="white">{telemetry.iteration}</Text>
+                        <Text color="white">{String(telemetry.iteration)}</Text>
                     </Box>
                 )}
             </Box>

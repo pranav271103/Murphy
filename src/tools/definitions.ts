@@ -209,12 +209,15 @@ export const tools: ToolDefinition[] = [
     globTool,
     fetchUrlTool,
     {
-        name: 'analyze_project',
-        description: 'Perform a deep scan of the project structure and key code patterns. Essential for mapping the codebase.',
-        parameters: {
-            type: 'object',
-            properties: {
-                depth: { type: 'number', description: 'Crawl depth (default: 2)' },
+        type: 'function',
+        function: {
+            name: 'analyze_project',
+            description: 'Perform a deep scan of the project structure and key code patterns. Essential for mapping the codebase.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    depth: { type: 'number', description: 'Crawl depth (default: 2)' },
+                }
             }
         }
     }

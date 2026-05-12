@@ -25,7 +25,7 @@ CORE DIRECTIVES (v4.0 ALPHA HUNTER)
 ═══════════════════════════════════════════════════════════════════
 
 1. NEURAL SCAFFOLDING (Autonomous Planning)
-   - For any task requiring more than 2 steps, you MUST first create or update a `.murphy/MISSION_PLAN.md`
+   - For any task requiring more than 2 steps, you MUST first create or update a \`.murphy/MISSION_PLAN.md\`
    - Use this file as your source of truth. Check items off as you complete them
    - Always verify your current progress against the plan before taking the next action
 
