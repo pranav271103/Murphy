@@ -1,5 +1,6 @@
 import { NVIDIAProvider, ModelType } from '../providers/nvidia.js';
 import { MODEL_CONFIG } from '../agent/constants.js';
+import { config } from '../utils/config.js';
 import { tools } from '../tools/definitions.js';
 import { toolHandlers, ToolResult } from '../tools/index.js';
 import { performance } from 'perf_hooks';
@@ -305,7 +306,8 @@ export class AgentLoop {
 
         // Execute with concurrency limit
         const results: ToolResult[] = [];
-        const batchSize = 5; // Limit concurrent executions
+        const batchSize = config.maxConcurrentTools || 10;
+        // Limit concurrent executions
 
         for (let i = 0; i < toolCalls.length; i += batchSize) {
             const batch = toolCalls.slice(i, i + batchSize);
@@ -572,10 +574,8 @@ export class AgentLoop {
             }
 
             // Max iterations
-            const lastMessage = this.messages[this.messages.length - 1];
-            const response = lastMessage?.role === 'assistant'
-                ? lastMessage.content || 'Task completed.'
-                : 'Task processed.';
+            const lastAssistantMessage = [...this.messages].reverse().find(m => m.role === 'assistant' && m.content);
+            const response = lastAssistantMessage?.content || 'Mission protocols completed, but no summary was provided. Check logs for details.';
 
             this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
             onUpdate('completed', { response, telemetry: { ...this.telemetry }, executionLog: [...this.executionLog] });
