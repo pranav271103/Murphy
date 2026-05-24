@@ -63,6 +63,7 @@ export const config = {
     defaultCwd: process.env.DEFAULT_CWD || process.cwd(),
     maxConcurrentTools: parseInt(process.env.MAX_CONCURRENT_TOOLS || '10', 10),
     toolTimeout: parseInt(process.env.TOOL_TIMEOUT || '120000', 10),
+    validationCommand: process.env.MURPHY_VALIDATION_COMMAND || 'npm run typecheck',
 
     // UI settings
     theme: process.env.MURPHY_THEME || 'retro',

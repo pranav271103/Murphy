@@ -413,6 +413,7 @@ export class AgentLoop {
         let lastError: Error | null = null;
         let consecutiveErrors = 0;
         const MAX_CONSECUTIVE_ERRORS = 3;
+        let consecutiveValidationFailures = 0;
 
         try {
             while (this.telemetry.iteration < this.MAX_ITERATIONS) {
@@ -517,6 +518,45 @@ export class AgentLoop {
 
                     // Check if done
                     if (!this.shouldContinue()) {
+                        // Check if we need to run automatic validation self-healing loop
+                        if (config.validationCommand && consecutiveValidationFailures < 3) {
+                            onUpdate('phase_change', {
+                                phase: 'recovery',
+                                message: `🔍 Running validation check: "${config.validationCommand}"...`
+                            });
+
+                            try {
+                                const { toolHandlers } = await import('../tools/index.js');
+                                const validationResult = await toolHandlers.run_command({
+                                    command: config.validationCommand,
+                                    cwd: '.'
+                                });
+
+                                if (validationResult.includes('❌ Command failed') || validationResult.toLowerCase().includes('error') || validationResult.includes('Error:')) {
+                                    consecutiveValidationFailures++;
+                                    onUpdate('phase_change', {
+                                        phase: 'recovery',
+                                        message: `⚠️ Validation failed. Initializing self-healing iteration (${consecutiveValidationFailures}/3)...`
+                                    });
+
+                                    // Inject warning context back to agent to self-heal
+                                    this.messages.push({
+                                        role: 'system',
+                                        content: `⚠️ Validation failed for command "${config.validationCommand}". Output logs:\n${validationResult}\n\nPlease analyze this error, locate the buggy files, and fix the codebase.`
+                                    });
+
+                                    continue;
+                                } else {
+                                    onUpdate('phase_change', {
+                                        phase: 'execution',
+                                        message: `✅ Validation passed successfully!`
+                                    });
+                                }
+                            } catch (e: any) {
+                                // Validation error runner failed
+                            }
+                        }
+
                         const finalResponse = response.content || '';
                         this.telemetry.totalElapsed = Math.round(performance.now() - startTimeTotal);
 
