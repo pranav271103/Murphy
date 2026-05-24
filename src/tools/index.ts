@@ -7,6 +7,7 @@ import { resolveWorkspacePath } from '../utils/paths.js';
 import { config } from '../utils/config.js';
 import { lockManager } from '../utils/locks.js';
 import { LSPClient } from '../utils/lsp.js';
+import { daemonManager } from '../utils/daemon.js';
 
 let lspClient: LSPClient | null = null;
 async function getLspClient(): Promise<LSPClient> {
@@ -21,6 +22,7 @@ process.on('exit', () => {
     if (lspClient) {
         lspClient.close();
     }
+    daemonManager.stopAll();
 });
 
 // execAsync removed - using spawn-based execution instead
@@ -628,6 +630,38 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `Found ${refs.length} references:\n${formatted}`;
         } catch (error: any) {
             return `❌ LSP Error: ${error.message}`;
+        }
+    },
+
+    start_daemon: async ({ name, command, cwd = '.' }: { name: string; command: string; cwd?: string }) => {
+        try {
+            return daemonManager.startDaemon(name, command, cwd);
+        } catch (error: any) {
+            return `❌ Error starting daemon: ${error.message}`;
+        }
+    },
+
+    stop_daemon: async ({ name }: { name: string }) => {
+        try {
+            return daemonManager.stopDaemon(name);
+        } catch (error: any) {
+            return `❌ Error stopping daemon: ${error.message}`;
+        }
+    },
+
+    get_daemon_logs: async ({ name }: { name: string }) => {
+        try {
+            return daemonManager.getDaemonLogs(name);
+        } catch (error: any) {
+            return `❌ Error reading daemon logs: ${error.message}`;
+        }
+    },
+
+    list_daemons: async () => {
+        try {
+            return daemonManager.listDaemons();
+        } catch (error: any) {
+            return `❌ Error listing daemons: ${error.message}`;
         }
     }
 };

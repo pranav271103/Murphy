@@ -228,6 +228,65 @@ export const lspGetReferencesTool: ToolDefinition = {
     },
 };
 
+export const startDaemonTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'start_daemon',
+        description: 'Start a long-running background command (e.g. server, test watch) under a custom tracking name.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Unique tracking name for the background process.' },
+                command: { type: 'string', description: 'The shell command to spawn.' },
+                cwd: { type: 'string', description: 'Working directory path.', default: '.' },
+            },
+            required: ['name', 'command'],
+        },
+    },
+};
+
+export const stopDaemonTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'stop_daemon',
+        description: 'Stop a running background process under a tracking name.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'The tracking name of the daemon to stop.' },
+            },
+            required: ['name'],
+        },
+    },
+};
+
+export const getDaemonLogsTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'get_daemon_logs',
+        description: 'Retrieve rolling stdout and stderr console output from a running background daemon.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'The tracking name of the daemon.' },
+            },
+            required: ['name'],
+        },
+    },
+};
+
+export const listDaemonsTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'list_daemons',
+        description: 'List all running background daemon names, command lines, status, and uptime.',
+        parameters: {
+            type: 'object',
+            properties: {},
+        },
+    },
+};
+
 /**
  * All available tools
  */
@@ -244,6 +303,10 @@ export const tools: ToolDefinition[] = [
     fetchUrlTool,
     lspGetDefinitionTool,
     lspGetReferencesTool,
+    startDaemonTool,
+    stopDaemonTool,
+    getDaemonLogsTool,
+    listDaemonsTool,
     {
         type: 'function',
         function: {
@@ -275,4 +338,8 @@ export const toolDefinitions: Record<string, ToolDefinition> = {
     fetch_url: fetchUrlTool,
     lsp_get_definition: lspGetDefinitionTool,
     lsp_get_references: lspGetReferencesTool,
+    start_daemon: startDaemonTool,
+    stop_daemon: stopDaemonTool,
+    get_daemon_logs: getDaemonLogsTool,
+    list_daemons: listDaemonsTool,
 };
