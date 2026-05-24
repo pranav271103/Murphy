@@ -8,6 +8,7 @@ import { config } from '../utils/config.js';
 import { lockManager } from '../utils/locks.js';
 import { LSPClient } from '../utils/lsp.js';
 import { daemonManager } from '../utils/daemon.js';
+import { CodebaseIndexer } from '../utils/embeddings.js';
 
 let lspClient: LSPClient | null = null;
 async function getLspClient(): Promise<LSPClient> {
@@ -16,6 +17,14 @@ async function getLspClient(): Promise<LSPClient> {
         await lspClient.start();
     }
     return lspClient;
+}
+
+let codebaseIndexer: CodebaseIndexer | null = null;
+function getCodebaseIndexer(): CodebaseIndexer {
+    if (!codebaseIndexer) {
+        codebaseIndexer = new CodebaseIndexer(config.defaultCwd);
+    }
+    return codebaseIndexer;
 }
 
 process.on('exit', () => {
@@ -662,6 +671,15 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return daemonManager.listDaemons();
         } catch (error: any) {
             return `❌ Error listing daemons: ${error.message}`;
+        }
+    },
+
+    search_codebase: async ({ query, limit = 5 }: { query: string; limit?: number }) => {
+        try {
+            const indexer = getCodebaseIndexer();
+            return await indexer.search(query, limit);
+        } catch (error: any) {
+            return `❌ Semantic Search Error: ${error.message}`;
         }
     }
 };

@@ -287,6 +287,22 @@ export const listDaemonsTool: ToolDefinition = {
     },
 };
 
+export const searchCodebaseTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'search_codebase',
+        description: 'Perform a semantic vector search across the entire project code files using NVIDIA NIM Embeddings.',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'The search query matching codebase symbols, features, or behaviors.' },
+                limit: { type: 'number', description: 'Maximum number of matches to retrieve (default: 5).', default: 5 },
+            },
+            required: ['query'],
+        },
+    },
+};
+
 /**
  * All available tools
  */
@@ -307,6 +323,7 @@ export const tools: ToolDefinition[] = [
     stopDaemonTool,
     getDaemonLogsTool,
     listDaemonsTool,
+    searchCodebaseTool,
     {
         type: 'function',
         function: {
@@ -342,4 +359,5 @@ export const toolDefinitions: Record<string, ToolDefinition> = {
     stop_daemon: stopDaemonTool,
     get_daemon_logs: getDaemonLogsTool,
     list_daemons: listDaemonsTool,
+    search_codebase: searchCodebaseTool,
 };
