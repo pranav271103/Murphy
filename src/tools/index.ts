@@ -6,6 +6,22 @@ import { performance } from 'perf_hooks';
 import { resolveWorkspacePath } from '../utils/paths.js';
 import { config } from '../utils/config.js';
 import { lockManager } from '../utils/locks.js';
+import { LSPClient } from '../utils/lsp.js';
+
+let lspClient: LSPClient | null = null;
+async function getLspClient(): Promise<LSPClient> {
+    if (!lspClient) {
+        lspClient = new LSPClient(config.defaultCwd);
+        await lspClient.start();
+    }
+    return lspClient;
+}
+
+process.on('exit', () => {
+    if (lspClient) {
+        lspClient.close();
+    }
+});
 
 // execAsync removed - using spawn-based execution instead
 
@@ -532,6 +548,86 @@ export const toolHandlers: Record<string, ToolHandler> = {
             return `Project Radar Scan (Depth ${depth}):\n${JSON.stringify(structure, null, 2)}\n\nFound ${files.length} key files. Use read_file on entry points to begin mission.`;
         } catch (error: any) {
             return `❌ Analysis Error: ${error.message}`;
+        }
+    },
+
+    lsp_get_definition: async ({ path: filePath, line, character }: { path: string; line: number; character: number }) => {
+        try {
+            const client = await getLspClient();
+            const safePath = resolveWorkspacePath(filePath);
+            
+            try {
+                const text = await fs.readFile(safePath, 'utf-8');
+                await client.openDocument(safePath, text);
+            } catch {
+                // Ignore open failures
+            }
+
+            const defs = await client.getDefinition(safePath, line, character);
+            if (!defs || (Array.isArray(defs) && defs.length === 0)) {
+                return `ℹ️ No definition found for symbol at ${filePath}:${line}:${character}`;
+            }
+
+            const formatLocation = (loc: any) => {
+                const targetUri = loc.uri || loc.targetUri || '';
+                const targetRange = loc.range || loc.targetSelectionRange || loc.targetRange || {};
+                const start = targetRange.start || {};
+                
+                let cleanedPath = targetUri.replace(/^file:\/\/\//, '');
+                cleanedPath = decodeURIComponent(cleanedPath);
+                if (process.platform === 'win32' && /^[a-zA-Z]:/.test(cleanedPath)) {
+                    cleanedPath = cleanedPath.replace(/\//g, '\\');
+                } else {
+                    cleanedPath = '/' + cleanedPath;
+                }
+
+                const relativePath = path.relative(process.cwd(), cleanedPath);
+                return `📍 Definition found in ${relativePath} at line ${(start.line || 0) + 1}, column ${(start.character || 0) + 1}`;
+            };
+
+            if (Array.isArray(defs)) {
+                return defs.map(formatLocation).join('\n');
+            } else {
+                return formatLocation(defs);
+            }
+        } catch (error: any) {
+            return `❌ LSP Error: ${error.message}`;
+        }
+    },
+
+    lsp_get_references: async ({ path: filePath, line, character }: { path: string; line: number; character: number }) => {
+        try {
+            const client = await getLspClient();
+            const safePath = resolveWorkspacePath(filePath);
+            
+            try {
+                const text = await fs.readFile(safePath, 'utf-8');
+                await client.openDocument(safePath, text);
+            } catch {
+                // Ignore open failures
+            }
+
+            const refs = await client.getReferences(safePath, line, character);
+            if (!refs || refs.length === 0) {
+                return `ℹ️ No references found for symbol at ${filePath}:${line}:${character}`;
+            }
+
+            const formatted = refs.map((ref: any) => {
+                const start = ref.range?.start || {};
+                let cleanedPath = ref.uri.replace(/^file:\/\/\//, '');
+                cleanedPath = decodeURIComponent(cleanedPath);
+                if (process.platform === 'win32' && /^[a-zA-Z]:/.test(cleanedPath)) {
+                    cleanedPath = cleanedPath.replace(/\//g, '\\');
+                } else {
+                    cleanedPath = '/' + cleanedPath;
+                }
+                const relativePath = path.relative(process.cwd(), cleanedPath);
+                return `🔗 ${relativePath}:${(start.line || 0) + 1}:${(start.character || 0) + 1}`;
+            }).join('\n');
+
+            return `Found ${refs.length} references:\n${formatted}`;
+        } catch (error: any) {
+            return `❌ LSP Error: ${error.message}`;
         }
     }
 };

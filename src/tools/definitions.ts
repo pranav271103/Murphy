@@ -194,6 +194,40 @@ export const fetchUrlTool: ToolDefinition = {
     },
 };
 
+export const lspGetDefinitionTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'lsp_get_definition',
+        description: 'Get definition location of a symbol (class, method, variable, function) at a specific line and character position using typescript language server.',
+        parameters: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'The absolute path to the file.' },
+                line: { type: 'number', description: 'Line number of the symbol (1-indexed).' },
+                character: { type: 'number', description: 'Character offset of the symbol (1-indexed).' },
+            },
+            required: ['path', 'line', 'character'],
+        },
+    },
+};
+
+export const lspGetReferencesTool: ToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'lsp_get_references',
+        description: 'Find all references of a symbol at a specific line and character position using typescript language server.',
+        parameters: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'The absolute path to the file.' },
+                line: { type: 'number', description: 'Line number of the symbol (1-indexed).' },
+                character: { type: 'number', description: 'Character offset of the symbol (1-indexed).' },
+            },
+            required: ['path', 'line', 'character'],
+        },
+    },
+};
+
 /**
  * All available tools
  */
@@ -208,6 +242,8 @@ export const tools: ToolDefinition[] = [
     grepTool,
     globTool,
     fetchUrlTool,
+    lspGetDefinitionTool,
+    lspGetReferencesTool,
     {
         type: 'function',
         function: {
@@ -237,4 +273,6 @@ export const toolDefinitions: Record<string, ToolDefinition> = {
     grep: grepTool,
     glob: globTool,
     fetch_url: fetchUrlTool,
+    lsp_get_definition: lspGetDefinitionTool,
+    lsp_get_references: lspGetReferencesTool,
 };
