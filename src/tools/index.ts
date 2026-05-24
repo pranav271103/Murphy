@@ -104,6 +104,71 @@ async function executeCommand(
 }
 
 /**
+ * Helper to perform fuzzy code replacement when exact matching fails
+ */
+function fuzzyReplace(content: string, oldString: string, newString: string): string | null {
+    // Try exact replacement first
+    if (content.includes(oldString)) {
+        return content.replaceAll(oldString, newString);
+    }
+
+    const normalize = (str: string) => str.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
+    const normalizedContent = normalize(content);
+    const normalizedOld = normalize(oldString);
+
+    if (!normalizedContent.includes(normalizedOld)) {
+        return null;
+    }
+
+    const contentLines = content.split(/\r?\n/);
+    const oldLines = oldString.split(/\r?\n/);
+
+    const normContentLines = contentLines.map(l => l.replace(/[ \t]+/g, ' ').trim());
+    const normOldLines = oldLines.map(l => l.replace(/[ \t]+/g, ' ').trim());
+
+    let matchIndex = -1;
+    for (let i = 0; i <= normContentLines.length - normOldLines.length; i++) {
+        let match = true;
+        for (let j = 0; j < normOldLines.length; j++) {
+            if (normContentLines[i + j] !== normOldLines[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            if (matchIndex !== -1) {
+                // Multiple matches found, abort fuzzy replace for safety
+                return null;
+            }
+            matchIndex = i;
+        }
+    }
+
+    if (matchIndex !== -1) {
+        const updatedLines = [
+            ...contentLines.slice(0, matchIndex),
+            ...newString.split(/\r?\n/),
+            ...contentLines.slice(matchIndex + normOldLines.length)
+        ];
+        return updatedLines.join('\n');
+    }
+
+    if (oldLines.length === 1) {
+        const escaped = oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        try {
+            const regex = new RegExp(escaped, 'g');
+            if (regex.test(content)) {
+                return content.replace(regex, newString);
+            }
+        } catch {
+            // Ignore regex issues
+        }
+    }
+
+    return null;
+}
+
+/**
  * Tool Handlers - The Predator's Arsenal
  *
  * All handlers return strings for easy message passing.
@@ -193,23 +258,18 @@ export const toolHandlers: Record<string, ToolHandler> = {
             const safePath = resolveWorkspacePath(filePath);
             const content = await fs.readFile(safePath, 'utf-8');
 
-            if (!content.includes(old_string)) {
-                return `❌ Error: Could not find the text to replace in ${filePath}`;
+            const newContent = fuzzyReplace(content, old_string, new_string);
+            if (newContent === null) {
+                return `❌ Error: Could not find the text block to replace in ${filePath} (even using fuzzy whitespace matching)`;
             }
-
-            const occurrences = content.split(old_string).length - 1;
-            if (occurrences > 1) {
-                return `⚠️ Warning: Found ${occurrences} occurrences. Replacing first one only.`;
-            }
-
-            const newContent = content.replaceAll(old_string, new_string);
 
             // Write a simple backup first
             await fs.writeFile(`${safePath}.bak`, content, 'utf-8');
             await fs.writeFile(safePath, newContent, 'utf-8');
 
             const elapsed = Math.round(performance.now() - startTime);
-            return `✅ Successfully edited ${safePath} (backup created at .bak) - replaced ${old_string.length} chars with ${new_string.length} chars (${elapsed}ms)`;
+            const isExact = content.includes(old_string);
+            return `✅ Successfully edited ${safePath} (backup created at .bak) - replaced ${old_string.length} chars with ${new_string.length} chars (${elapsed}ms, mode: ${isExact ? 'exact' : 'fuzzy'})`;
         } catch (error: any) {
             return `❌ Error editing file: ${error.message}`;
         } finally {
